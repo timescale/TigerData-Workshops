@@ -1,0 +1,21 @@
+sensor_id,model,location
+sensor_001,EnviroMonitor-2000,Room 1
+sensor_002,TempSense-Pro,Room 2
+sensor_003,TempSense-Pro,Room 3
+sensor_004,ClimateGuard-X1,Room 4
+sensor_005,EnviroMonitor-2000,Room 5
+sensor_006,SensorMax-Elite,Room 6
+sensor_007,EnviroMonitor-2000,Room 7
+sensor_008,ClimateGuard-X1,Room 8
+sensor_009,TempSense-Pro,Room 9
+sensor_010,TempSense-Pro,Room 10
+sensor_011,TempSense-Pro,Room 11
+sensor_012,EnviroMonitor-2000,Room 12
+sensor_013,TempSense-Pro,Room 13
+sensor_014,ClimateGuard-X1,Room 14
+sensor_015,ClimateGuard-X1,Room 15
+sensor_016,EnviroMonitor-2000,Room 16
+sensor_017,ClimateGuard-X1,Room 17
+sensor_018,ClimateGuard-X1,Room 18
+sensor_019,TempSense-Pro,Room 19
+sensor_020,TempSense-Pro,Room 20
