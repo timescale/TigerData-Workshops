@@ -366,7 +366,31 @@ SELECT add_compression_policy(
   if_not_exists => true
 );
 
+-- ============================================================================
+-- ## Inspect Hypertable Chunks & Compression Stats
+-- ============================================================================
+-- Use these queries to inspect the internal chunk layout of oee_timeseries
+-- and measure compression effectiveness.
 
+-- List chunks, their time ranges, and compression status
+SELECT
+   chunk_name,
+   range_start,
+   range_end,
+   is_compressed
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'oee_timeseries'
+ORDER BY range_start;
+
+-- Compression stats: total size before vs after compression
+SELECT 
+    pg_size_pretty(before_compression_total_bytes) AS before_compression,
+    pg_size_pretty(after_compression_total_bytes)  AS after_compression,
+    round(
+      (1 - (after_compression_total_bytes::numeric / NULLIF(before_compression_total_bytes,0))) * 100,
+      2
+    ) AS compression_savings_pct
+FROM hypertable_compression_stats('oee_timeseries');
 
 -- ============================================================================
 -- ## Create 1-Hour Continuous Aggregate
@@ -474,3 +498,45 @@ ORDER BY line_id;
 SELECT
     (SELECT COUNT(*) FROM oee_timeseries) AS raw_count,
     (SELECT COUNT(*) FROM oee_1h)         AS cagg_1h_count;
+
+-- ============================================================================
+-- ## Performance Comparison: Raw vs 1h Continuous Aggregate
+-- ============================================================================
+-- Use these two queries to *demonstrate* performance benefits.
+-- 1. Run the RAW query first and note execution time.
+-- 2. Then run the CAGG query and note execution time.
+-- Optionally uncomment EXPLAIN ANALYZE to show the query plan.
+
+-- === RAW hypertable: OEE per line for last 2 months ===
+
+EXPLAIN ANALYZE
+SELECT
+    line_id,
+    ROUND((AVG(availability) * 100)::numeric, 2)  AS availability_pct,
+    ROUND((AVG(performance) * 100)::numeric, 2)   AS performance_pct,
+    ROUND((AVG(quality) * 100)::numeric, 2)       AS quality_pct,
+    ROUND((AVG(oee) * 100)::numeric, 2)           AS oee_pct
+FROM oee_timeseries
+WHERE time >= now() - INTERVAL '2 months'
+GROUP BY line_id
+ORDER BY line_id;
+
+-- === 1h Continuous Aggregate: OEE per line for last 2 months ===
+
+EXPLAIN ANALYZE
+SELECT
+    line_id,
+    ROUND((AVG(availability) * 100)::numeric, 2) AS availability_pct,
+    ROUND((AVG(performance)  * 100)::numeric, 2) AS performance_pct,
+    ROUND((AVG(quality)      * 100)::numeric, 2) AS quality_pct,
+    ROUND((AVG(oee)          * 100)::numeric, 2) AS oee_pct
+FROM oee_1h
+WHERE bucket >= now() - INTERVAL '2 months'
+GROUP BY line_id
+ORDER BY line_id;
+
+-- The 1h CAGG query should:
+-- - Scan far fewer rows
+-- - Use the materialized view instead of raw hypertable chunks
+-- - Execute significantly faster, especially as data volume grows
+
