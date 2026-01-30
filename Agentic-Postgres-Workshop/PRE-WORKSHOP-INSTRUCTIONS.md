@@ -13,12 +13,13 @@ This workshop uses AI coding assistants to work with TigerData (TimescaleDB clou
 5. [Step 3: Authenticate Gemini CLI](#step-3-authenticate-gemini-cli)
 6. [Step 4: Test Gemini CLI](#step-4-test-gemini-cli)
 7. [Step 5: Install Tiger CLI](#step-5-install-tiger-cli)
-8. [Step 6: Authenticate Tiger CLI](#step-6-authenticate-tiger-cli)
-9. [Step 7: Connect Tiger MCP to Gemini CLI](#step-7-connect-tiger-mcp-to-gemini-cli)
-10. [Step 8: Test the Integration](#step-8-test-the-integration)
-11. [Step 9: Download Workshop Materials](#step-9-download-workshop-materials)
-12. [Troubleshooting](#troubleshooting)
-13. [Getting Help](#getting-help)
+8. [Step 6: Install psql (PostgreSQL Client)](#step-6-install-psql-postgresql-client)
+9. [Step 7: Authenticate Tiger CLI](#step-7-authenticate-tiger-cli)
+10. [Step 8: Connect Tiger MCP to Gemini CLI](#step-8-connect-tiger-mcp-to-gemini-cli)
+11. [Step 9: Test the Integration](#step-9-test-the-integration)
+12. [Step 10: Download Workshop Materials](#step-10-download-workshop-materials)
+13. [Troubleshooting](#troubleshooting)
+14. [Getting Help](#getting-help)
 
 ---
 
@@ -27,6 +28,7 @@ This workshop uses AI coding assistants to work with TigerData (TimescaleDB clou
 **What you'll install:**
 - **Gemini CLI** - A free AI coding assistant from Google
 - **Tiger CLI** - A command-line tool for managing TigerData databases
+- **psql** - PostgreSQL command-line client for direct database access
 - **Git** (or curl/wget) - For downloading workshop materials
 
 **What you'll need:**
@@ -232,7 +234,84 @@ tiger version
 
 ---
 
-## Step 6: Authenticate Tiger CLI
+## Step 6: Install psql (PostgreSQL Client)
+
+The `psql` command-line tool is the standard PostgreSQL interactive terminal. While not strictly required for the workshop (since we'll use Gemini CLI to interact with the database), having psql installed is useful for direct database queries and troubleshooting.
+
+### Installation Instructions
+
+**For macOS:**
+
+If you have Homebrew installed:
+
+```bash
+brew install postgresql@17
+```
+
+After installation, add psql to your PATH:
+
+```bash
+echo 'export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**For macOS without Homebrew:**
+
+Download and install Postgres.app from [postgresapp.com](https://postgresapp.com):
+1. Download Postgres.app
+2. Move it to your Applications folder
+3. Double-click to open
+4. Click "Initialize" to create a new server
+5. Add the command-line tools to your PATH:
+
+```bash
+sudo mkdir -p /etc/paths.d && echo /Applications/Postgres.app/Contents/Versions/latest/bin | sudo tee /etc/paths.d/postgresapp
+```
+
+**For Windows:**
+
+Download the PostgreSQL installer from [postgresql.org](https://www.postgresql.org/download/windows/):
+
+1. Visit the PostgreSQL download page
+2. Download the installer for your version of Windows
+3. Run the installer
+4. During installation, you can uncheck "PostgreSQL Server" if you only need the client tools
+5. Make sure "Command Line Tools" is checked
+6. Complete the installation
+
+**For Linux (Ubuntu/Debian):**
+
+```bash
+sudo apt update
+sudo apt install postgresql-client
+```
+
+**For Linux (RedHat/CentOS/Fedora):**
+
+```bash
+sudo dnf install postgresql
+```
+
+### Verify Installation
+
+Check that psql was installed correctly:
+
+```bash
+psql --version
+```
+
+**Expected output:** You should see a version number like `psql (PostgreSQL) 17.x` or `psql (PostgreSQL) 16.x`
+
+**If you get "command not found":**
+- On macOS: Make sure you added psql to your PATH (see above)
+- On Windows: Restart your terminal or PowerShell
+- On Linux: The package may be named differently; try `sudo apt install postgresql-client-common`
+
+**Note:** You won't need to run a PostgreSQL server locally - we'll be connecting to TigerData cloud databases. We only need the `psql` client tool.
+
+---
+
+## Step 7: Authenticate Tiger CLI
 
 Connect Tiger CLI to your TigerData account.
 
@@ -276,7 +355,7 @@ tiger service list
 
 ---
 
-## Step 7: Connect Tiger MCP to Gemini CLI
+## Step 8: Connect Tiger MCP to Gemini CLI
 
 Now we'll connect the Tiger MCP server to Gemini CLI, allowing the AI assistant to interact with TigerData.
 
@@ -302,7 +381,7 @@ tiger mcp install
 
 ---
 
-## Step 8: Test the Integration
+## Step 9: Test the Integration
 
 Now let's verify that Gemini CLI can communicate with TigerData through the Tiger MCP server.
 
@@ -349,7 +428,7 @@ list my tigerdata services
 
 ---
 
-## Step 9: Download Workshop Materials
+## Step 10: Download Workshop Materials
 
 The workshop uses sample CSV files with time-series sensor data. You need to download these files to your computer.
 
@@ -529,6 +608,7 @@ Before attending the workshop, verify you can do the following:
 - [ ] Open a terminal on your computer
 - [ ] Run `gemini --version` and see a version number
 - [ ] Run `tiger version` and see a version number
+- [ ] Run `psql --version` and see a version number
 - [ ] Run `gemini` and interact with the AI assistant
 - [ ] Ask Gemini "what tools do you have access to?" and see Tiger tools listed
 - [ ] Ask Gemini "list my tigerdata services" and get a response (even if empty)
