@@ -136,23 +136,30 @@ This will create `data.csv` and `sensors.csv` files. Alternatively, you can use 
 
 Use your AI coding assistant to create an optimized database schema using TigerData best practices.
 
-**Prompt for your AI assistant:**
+**Prompt for your AI assistant to design the schema:**
 
 ```text
-1. Look at the two CSV files in this directory
-2. Create Tiger service `agentic-postgres-workshop` if not already created
-3. Using Tiger best practices, create an optimized schema for the data
-4. Save the schema to `schema.sql`
-5. Apply schema to the newly created database
-6. Load data from CSV files
+- Examine two CSV files in this directory
+- Use Tiger MCP for best practices and documentation and create an optimized schema for the data
+- Save the schema to `schema.sql`
+```
+
+After schema is created, examine it and if you are satisfied with the result continue to service creation:
+
+**Prompt for your AI assistant to create Tiger Serivce, apply schema and load the data:**
+
+```text
+- Create Tiger service `agentic-postgres-workshop` if not already created
+- Apply schema to the newly created database
+- Load data from CSV files
 ```
 
 **What to expect:**
 - The AI will analyze your CSV files
-- Create a TigerData service (TimescaleDB instance)
 - Design an optimized schema with hypertables for time-series data
 - Create appropriate indexes and continuous aggregates
-- Load your data into the database
+- Create a TigerData service (TimescaleDB instance)
+- Appl schema and load your data into the database
 
 ### 3. Data Analysis
 
