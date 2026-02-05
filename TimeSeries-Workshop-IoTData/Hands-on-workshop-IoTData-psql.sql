@@ -56,6 +56,7 @@ CREATE TABLE sensors(
 -- is segmented. The segmentby column is used to group the data into segments,
 -- which are then compressed separately.
 
+
 CREATE TABLE sensor_data (
   time TIMESTAMPTZ NOT NULL,
   sensor_id INTEGER,
@@ -63,10 +64,9 @@ CREATE TABLE sensor_data (
   cpu DOUBLE PRECISION,
   FOREIGN KEY (sensor_id) REFERENCES sensors (id)
 ) WITH (
-   tsdb.hypertable,
-   tsdb.partition_column='time',
-   tsdb.segmentby = 'sensor_id',
-   tsdb.orderby = 'time DESC'
+  tsdb.hypertable,
+  tsdb.segmentby = 'sensor_id',
+  tsdb.orderby = 'time DESC'
 );
 
 -- ============================================================================
@@ -78,9 +78,6 @@ CREATE TABLE sensor_data (
 -- time column, so you don't need to create an index on that column.
 
 CREATE INDEX ON sensor_data (sensor_id, time);
-
--- If you have sparse data, with columns that are often NULL, you can add a clause to the index, saying WHERE column IS NOT NULL.
--- This prevents the index from indexing NULL data, which can lead to a more compact and efficient index.
 
 -- Configurable sparse indexes
 -- lightweight metadata structures created on compressed chunks
@@ -114,6 +111,7 @@ ALTER TABLE sensor_data SET (
 
 -- Please note that setting up a bloom index in this case on sensor_id wouldn't work as these are desined for compressed columns
 -- and sensor_id is what we are segmenting on, and as such it stays uncompressed. 
+
 
 -- ============================================================================
 -- ## Populate the sensors table: 
@@ -154,7 +152,7 @@ FROM generate_series(now() - interval '30 days', now(), interval '5 seconds') AS
 -- Ingest IoT device data from S3 via Online S3 Connector
 --e.g. s3://dario-demo-data/sensor_data.csv
 
-============================================================================
+-- ============================================================================
 -- ## Examine Hypertable Partitions
 -- ============================================================================
 -- Timescale provides SQL API (functions, views, procedures) to manage hypertables
@@ -169,11 +167,23 @@ SELECT
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'sensor_data';
 
---
+-- Sample output:
+       chunk_name       |      range_start       |       range_end        | is_compressed 
+------------------------+------------------------+------------------------+---------------
+ _hyper_259_26078_chunk | 2026-01-01 00:00:00+00 | 2026-01-08 00:00:00+00 | f
+ _hyper_259_26079_chunk | 2026-01-08 00:00:00+00 | 2026-01-15 00:00:00+00 | f
+ _hyper_259_26080_chunk | 2026-01-15 00:00:00+00 | 2026-01-22 00:00:00+00 | f
+ _hyper_259_26081_chunk | 2026-01-22 00:00:00+00 | 2026-01-29 00:00:00+00 | f
+ _hyper_259_26082_chunk | 2026-01-29 00:00:00+00 | 2026-02-05 00:00:00+00 | f
+ _hyper_259_26083_chunk | 2026-02-05 00:00:00+00 | 2026-02-12 00:00:00+00 | f
+(6 rows)
+
+
 -- ============================================================================
 -- ## Verify the simulated dataset:
 -- ============================================================================
-SELECT * FROM sensor_data ORDER BY time;
+SELECT Count(*) FROM sensor_data;
+SELECT * FROM sensor_data ORDER BY time LIMIT 100;
 
 -- Sample output:
 time              | sensor_id |    temperature     |         cpu         
@@ -190,26 +200,6 @@ time              | sensor_id |    temperature     |         cpu
 
 -- ============================================================================
 -- ## After you simulate a dataset, you can run some basic queries on it, e.g. 
--- Average temperature and CPU by 30-minute windows:
--- ============================================================================
-SELECT
-  time_bucket('30 minutes', time) AS period,
-  AVG(temperature) AS avg_temp,
-  AVG(cpu) AS avg_cpu
-FROM sensor_data
-GROUP BY period;
-
--- Sample output:
-period         |     avg_temp     |      avg_cpu      
-------------------------+------------------+-------------------
- 2020-03-31 19:00:00+00 | 49.6615830013373 | 0.477344429974134
- 2020-03-31 22:00:00+00 | 58.8521540844037 | 0.503637770501276
- 2020-03-31 16:00:00+00 | 50.4250325243144 | 0.511075591299838
- 2020-03-31 17:30:00+00 | 49.0742547437549 | 0.527267253802468
- 2020-04-01 14:30:00+00 | 49.3416377226822 | 0.438027751864865
- ...
-
--- ============================================================================
 -- Average and last temperature, average CPU by 30-minute windows:
 -- ============================================================================
 SELECT
@@ -218,16 +208,17 @@ SELECT
   last(temperature, time) AS last_temp,
   AVG(cpu) AS avg_cpu
 FROM sensor_data
-GROUP BY period;
+GROUP BY period
+ORDER BY period;
 
 -- Sample output:
-period         |     avg_temp     |    last_temp     |      avg_cpu      
-------------------------+------------------+------------------+-------------------
- 2020-03-31 19:00:00+00 | 49.6615830013373 | 84.3963081017137 | 0.477344429974134
- 2020-03-31 22:00:00+00 | 58.8521540844037 | 76.5528806950897 | 0.503637770501276
- 2020-03-31 16:00:00+00 | 50.4250325243144 | 43.5192013625056 | 0.511075591299838
- 2020-03-31 17:30:00+00 | 49.0742547437549 |  22.740753274411 | 0.527267253802468
- 2020-04-01 14:30:00+00 | 49.3416377226822 | 59.1331578791142 | 0.438027751864865
+       period         |      avg_temp      |       last_temp       |       avg_cpu       
+------------------------+--------------------+-----------------------+---------------------
+ 2026-01-06 14:00:00+00 |  51.60930295600504 |     7.967133992592035 |  0.5190356186358789
+ 2026-01-06 14:30:00+00 | 49.944447015084826 |    2.1082860067580533 | 0.49407287047243675
+ 2026-01-06 15:00:00+00 | 48.890921442323844 |      70.1353514024994 |  0.4959841832825577
+ 2026-01-06 15:30:00+00 |  49.19831742462273 |    41.015060145537554 | 0.49869157688373034
+ 2026-01-06 16:00:00+00 | 50.178389952691994 |     59.29227603711116 |  0.5049884275739991
 ...
 
 -- ============================================================================
@@ -270,13 +261,13 @@ location |         period         |     avg_temp     |     last_temp     |      
 -- ## Calculate One-Day Summary Data on Non-Compressed Hypertable
 -- ============================================================================
 SELECT
-    time_bucket('30 minutes', time) AS period,
+    time_bucket('1 day', time) AS period,
     AVG(temperature) AS avg_temp,
     last(temperature, time) AS last_temp,
     AVG(cpu) AS avg_cpu
 FROM sensor_data
 WHERE sensor_id = '4' 
-  AND time >= NOW() - INTERVAL '14 days'
+  AND time >= NOW() - INTERVAL '7 days'
 GROUP BY period, sensor_id
 ORDER BY period;
 
@@ -297,9 +288,8 @@ SELECT compress_chunk(c, true) FROM show_chunks('sensor_data') c;
 -- SELECT decompress_chunk(c, true) FROM show_chunks('sensor_data') c;
 
 -- ### Automatically compress Hypertable with a policy
--- Create a job that automatically converts chunks in a hypertable to the 
--- columnstore older than 1 day. This is a preferred way to compress data in production.
-CALL add_columnstore_policy('sensor_data', after => INTERVAL '1d');
+-- Columnstore compression policies are now created automatically upon hypertable definition. 
+-- Tiger Data DB enables the columnstore by default and creates a compression policy that runs after one chunk interval (default of 7-days).
 
 -- ============================================================================
 -- ## Storage Saved by Compression
@@ -314,6 +304,27 @@ FROM hypertable_compression_stats('sensor_data');
 
 -- The same information you can access in the TigerData Console UI.
 -- In the Explorer, click on the `sensor_data` hypertable.
+
+-- To check the compression ration on a per chunk basis:
+SELECT 
+c.chunk_name,
+to_timestamp(c.range_start_integer/1000) as range_start,
+to_timestamp(c.range_end_integer/1000) as range_end,
+to_timestamp(c.range_end_integer/1000) - to_timestamp(c.range_start_integer/1000) as chunk_length,
+c.is_compressed,
+CASE
+   WHEN s.before_compression_total_bytes IS NOT NULL
+         THEN pg_size_pretty(s.before_compression_total_bytes)
+   ELSE pg_size_pretty(d.total_bytes)
+END before_compression,
+pg_size_pretty(s.after_compression_total_bytes) as after_compression,
+ROUND((before_compression_total_bytes::NUMERIC-s.after_compression_total_bytes::NUMERIC)/before_compression_total_bytes::NUMERIC *100,2) AS compression_ratio
+FROM 
+chunks_detailed_size('sensor_data') d, 
+chunk_compression_stats('sensor_data') s,
+timescaledb_information.chunks c 
+WHERE (d.chunk_name=c.chunk_name and d.chunk_name=s.chunk_name) 
+order by range_start desc limit 100;
 
 -- ============================================================================
 -- ## Calculate One-Day Summary Data on Compressed Hypertable
@@ -330,6 +341,7 @@ WHERE sensor_id = '4'
   AND time >= NOW() - INTERVAL '30 days'
 GROUP BY period, sensor_id
 ORDER BY period;
+
 -- The query runs on columnar/compressed data and it is faster than the same query on uncompressed data
 
 -- ============================================================================
@@ -415,11 +427,27 @@ ALTER DATABASE tsdb SET timescaledb.enable_tiered_reads to true;
 ALTER DATABASE tsdb SET timescaledb.enable_tiered_reads to false;
 
 -- list tiered chunks
-SELECT * FROM timescaledb_osm.tiered_chunks;
+SELECT * FROM timescaledb_osm.tiered_chunks WHERE hypertable_name = 'sensor_data';
 
 -- list chunks scheduled for tiering
-SELECT * FROM timescaledb_osm.chunks_queued_for_tiering;
+SELECT * FROM timescaledb_osm.chunks_queued_for_tiering WHERE hypertable_name = 'sensor_data';
 
+-- ============================================================================
+-- ## Query Data Tiered to S3 
+-- ============================================================================
+-- There will be some latency, depending on the query, you may have to go back and forth 10 * 20 * 30 times and read from S3 bucket.
+-- That by itself adds, 20 Multiply 100 milliseconds as a minimum on top of everything else. 
+-- This can still be good enough for large scans, but not for point lookups.
+SELECT
+    time_bucket('1 day', time) AS period,
+    AVG(temperature) AS avg_temp,
+    last(temperature, time) AS last_temp,
+    AVG(cpu) AS avg_cpu
+FROM sensor_data
+WHERE sensor_id = '4' 
+  AND time >= '20 days'
+GROUP BY period, sensor_id
+ORDER BY period;
 
 -- ============================================================================
 -- ## Add Data Retention Policy by dropping data older than 21 Days
