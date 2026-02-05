@@ -445,7 +445,7 @@ SELECT
     AVG(cpu) AS avg_cpu
 FROM sensor_data
 WHERE sensor_id = '4' 
-  AND time >= '20 days'
+  AND time >= NOW() - INTERVAL '20 days'
 GROUP BY period, sensor_id
 ORDER BY period;
 
