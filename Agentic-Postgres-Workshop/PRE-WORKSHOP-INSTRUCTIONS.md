@@ -93,18 +93,12 @@ Gemini CLI is a free AI coding assistant from Google. It provides the AI capabil
 
 ### Installation Instructions
 
-**For macOS:**
+**For macOS and Linux:**
 
-Install with npm
-
-```bash
-npm install -g @google/gemini-cli
-```
-
-Install with Homebrew
+Run this command in your terminal:
 
 ```bash
-brew install gemini-cli
+curl -fsSL https://geminicli.com | sh
 ```
 
 **Expected output:** You should see messages about downloading and installing Gemini CLI.
