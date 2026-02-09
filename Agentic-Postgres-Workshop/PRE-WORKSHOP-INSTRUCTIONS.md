@@ -235,6 +235,7 @@ tiger version
 **If you get "command not found":**
 - Close and reopen your terminal
 - Try the command again
+- Run: `echo 'export PATH="$HOME/bin:${PATH}"' >> ~/.zshrc`, then `source ~/.zshrc` and try again
 - On Windows, you may need to restart PowerShell
 - See [Troubleshooting](#troubleshooting) section
 
