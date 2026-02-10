@@ -1,4 +1,4 @@
--- -- ============================================================================
+-- ============================================================================
 -- # Analyze nternet of Things (IoT) Data (UI Version)
 -- ============================================================================
 --
@@ -82,9 +82,7 @@ CREATE INDEX ON sensor_data (sensor_id, time);
 -- Configurable sparse indexes
 -- lightweight metadata structures created on compressed chunks
 -- to allow efficient filtering without needing full B-tree indexes.
---
 -- They are designed to reduce I/O and improve query performance on compressed data
-
 
 -- Types of sparse indexes
 -- Minmax: Stores the minimum and maximum values for an ORDER BY column
@@ -93,25 +91,15 @@ CREATE INDEX ON sensor_data (sensor_id, time);
 -- Bloom: Uses a probabilistic Bloom filter to record whether a value might exist in a segment.
 -- Best for equality lookups or "existence" queries on high-cardinality
 -- columns (e.g., UUIDs, device IDs) without decompressing
-
-
 -- Ideal for queries like:
 -- Point lookups - WHERE device_id = 20050 (sparse value)
 -- Range queries - SELECT count(*) WHERE heart_rate BETWEEN 90 AND 95
 -- Attribute filtering - SELECT count(*) WHERE device_id BETWEEN 1000 AND 1100
 -- Exclusion queries - SELECT count(*) WHERE device_id > 4000
 
--- Make sure that the sparse index creation is set to TRUE
-SET timescaledb.enable_sparse_index_bloom TO true;
-
-
 ALTER TABLE sensor_data SET (
    timescaledb.compress_index =
 'minmax(temperature), minmax(cpu)');
-
--- Please note that setting up a bloom index in this case on sensor_id wouldn't work as these are desined for compressed columns
--- and sensor_id is what we are segmenting on, and as such it stays uncompressed. 
-
 
 -- ============================================================================
 -- ## Populate the sensors table: 
@@ -424,7 +412,7 @@ SELECT add_tiering_policy('sensor_data', INTERVAL '7 days');
 
 -- enable/diable tiered reads for all future sessions
 ALTER DATABASE tsdb SET timescaledb.enable_tiered_reads to true;
-ALTER DATABASE tsdb SET timescaledb.enable_tiered_reads to false;
+-- ALTER DATABASE tsdb SET timescaledb.enable_tiered_reads to false;
 
 -- list tiered chunks
 SELECT * FROM timescaledb_osm.tiered_chunks WHERE hypertable_name = 'sensor_data';
