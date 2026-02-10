@@ -103,6 +103,8 @@ npm install -g @google/gemini-cli
 
 Install globally with Homebrew (macOS)
 
+If brew is not installed - follow the ionstructions at https://brew.sh/
+
 ```bash
 brew install gemini-cli
 ```
