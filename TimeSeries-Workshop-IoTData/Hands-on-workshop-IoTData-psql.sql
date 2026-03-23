@@ -1,5 +1,5 @@
 -- ============================================================================
--- # Analyze nternet of Things (IoT) Data (UI Version)
+-- # Analyze Internet of Things (IoT) Data (UI Version)
 -- ============================================================================
 -- The Internet of Things (IoT) describes a trend where computing capabilities are embedded into IoT devices. 
 -- That is, physical objects, ranging from light bulbs to oil wells. 
