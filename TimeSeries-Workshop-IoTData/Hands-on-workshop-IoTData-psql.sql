@@ -1,7 +1,6 @@
 -- ============================================================================
 -- # Analyze nternet of Things (IoT) Data (UI Version)
 -- ============================================================================
---
 -- The Internet of Things (IoT) describes a trend where computing capabilities are embedded into IoT devices. 
 -- That is, physical objects, ranging from light bulbs to oil wells. 
 -- Many IoT devices collect sensor data about their environment and generate time-series datasets with relational metadata.
@@ -48,7 +47,7 @@ CREATE TABLE sensors(
 );
 
 -- Create a hypertable to store the real-time sensor data
--- To enable columnarstore, you need to set the tsdb.hypertable
+-- To enable columnarstore, you need to set the tsdb.enable_columnstore
 -- parameter to true.
 -- The tsdb.orderby parameter specifies the order in which the
 -- data is compressed.
@@ -65,8 +64,11 @@ CREATE TABLE sensor_data (
   FOREIGN KEY (sensor_id) REFERENCES sensors (id)
 ) WITH (
   tsdb.hypertable,
+  tsdb.partition_column='time',
+  tsdb.enable_columnstore=true,
   tsdb.segmentby = 'sensor_id',
-  tsdb.orderby = 'time DESC'
+  tsdb.orderby = 'time DESC',
+  tsdb.sparse_index='minmax(temperature), minmax(cpu)'
 );
 
 -- ============================================================================
@@ -77,9 +79,11 @@ CREATE TABLE sensor_data (
 -- Hypertables automatically create indexes on the 
 -- time column, so you don't need to create an index on that column.
 
-CREATE INDEX ON sensor_data (sensor_id, time);
+ CREATE INDEX ON sensor_data (sensor_id, time);
 
--- Configurable sparse indexes
+-- ============================================================================
+-- ## Configurable sparse indexes, now part of hypertable creation API
+-- ============================================================================
 -- lightweight metadata structures created on compressed chunks
 -- to allow efficient filtering without needing full B-tree indexes.
 -- They are designed to reduce I/O and improve query performance on compressed data
@@ -96,6 +100,9 @@ CREATE INDEX ON sensor_data (sensor_id, time);
 -- Range queries - SELECT count(*) WHERE heart_rate BETWEEN 90 AND 95
 -- Attribute filtering - SELECT count(*) WHERE device_id BETWEEN 1000 AND 1100
 -- Exclusion queries - SELECT count(*) WHERE device_id > 4000
+
+-- Alternatively, you can exculde tsdb.sparse_index='minmax(temperature), minmax(humidity)' line from 
+-- Hypertable creation and create the index manually subsequently once you confirm the query pattern
 
 ALTER TABLE sensor_data SET (
    timescaledb.compress_index =
@@ -133,7 +140,7 @@ SELECT
   sensor_id,
   random() AS cpu,
   random()*100 AS temperature
-FROM generate_series(now() - interval '30 days', now(), interval '5 seconds') AS g1(time), generate_series(1,4,1) AS g2(sensor_id);
+FROM generate_series(now() - interval '60 days', now(), interval '5 seconds') AS g1(time), generate_series(1,4,1) AS g2(sensor_id);
 
 -- ## Load data from S3 - Optional
 -- ============================================================================
@@ -165,7 +172,6 @@ WHERE hypertable_name = 'sensor_data';
  _hyper_259_26082_chunk | 2026-01-29 00:00:00+00 | 2026-02-05 00:00:00+00 | f
  _hyper_259_26083_chunk | 2026-02-05 00:00:00+00 | 2026-02-12 00:00:00+00 | f
 (6 rows)
-
 
 -- ============================================================================
 -- ## Verify the simulated dataset:
@@ -244,7 +250,6 @@ location |         period         |     avg_temp     |     last_temp     |      
  floor    | 2020-03-31 17:00:00+00 | 62.2794370166957 |  52.6636955793947 | 0.454323202022351
 ...
 
-
 -- ============================================================================
 -- ## Calculate One-Day Summary Data on Non-Compressed Hypertable
 -- ============================================================================
@@ -265,19 +270,16 @@ ORDER BY period;
 -- ============================================================================
 -- ## Enable Columnarstore (Compression)
 -- ============================================================================
--- Enabling a columnarstore for the table by itself does not compress the data.
--- You can either manually compress hypertable chunks or create a policy to 
--- automatically compress chunks. The compress_chunk() function compresses the 
--- chunk of data in the hypertable.
+-- Enabling a columnarstore for the table by itself does not compress the data. 
+-- You can turn compression on either via policy so it automatically compress chunks after a specified period or
+-- manually compress hypertable chunks via compress_chunk() function.
+
+CALL add_columnstore_policy('sensor_data', after => INTERVAL '7 days');
 
 -- ### Manually compress all the chunks of the hypertable
 -- TODO: switch to convert_to_columnarstore()?
 SELECT compress_chunk(c, true) FROM show_chunks('sensor_data') c;
 -- SELECT decompress_chunk(c, true) FROM show_chunks('sensor_data') c;
-
--- ### Automatically compress Hypertable with a policy
--- Columnstore compression policies are now created automatically upon hypertable definition. 
--- Tiger Data DB enables the columnstore by default and creates a compression policy that runs after one chunk interval (default of 7-days).
 
 -- ============================================================================
 -- ## Storage Saved by Compression
@@ -409,16 +411,15 @@ ORDER BY period;
 
 SELECT add_tiering_policy('sensor_data', INTERVAL '7 days');
 
-
 -- enable/diable tiered reads for all future sessions
 ALTER DATABASE tsdb SET timescaledb.enable_tiered_reads to true;
 -- ALTER DATABASE tsdb SET timescaledb.enable_tiered_reads to false;
 
--- list tiered chunks
-SELECT * FROM timescaledb_osm.tiered_chunks WHERE hypertable_name = 'sensor_data';
-
 -- list chunks scheduled for tiering
 SELECT * FROM timescaledb_osm.chunks_queued_for_tiering WHERE hypertable_name = 'sensor_data';
+
+-- list tiered chunks
+SELECT * FROM timescaledb_osm.tiered_chunks WHERE hypertable_name = 'sensor_data';
 
 -- ============================================================================
 -- ## Query Data Tiered to S3 
