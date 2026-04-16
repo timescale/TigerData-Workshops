@@ -40,7 +40,7 @@ All connection details are declared in `grafana/provisioning/datasources/tigercl
 
 | Field | Description |
 |-------|-------------|
-| `url` | Tiger Cloud endpoint in `host:port` format — **no** `postgres://` prefix |
+| `url` | Tiger Cloud endpoint in `host:port` format |
 | `user` | Database username (default: `tsdbadmin`) |
 | `secureJsonData.password` | Database password |
 | `database` | Target database name (default: `tsdb`) |
