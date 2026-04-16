@@ -2,6 +2,9 @@
 
 Local Grafana instance provisioned via Docker, backed by a [Tiger Cloud](https://tigerdata.com) TimescaleDB service. Visualizes 15-minute wellhead telemetry across 20 wells spanning four U.S. basins.
 
+
+<img width="1495" height="896" alt="Screenshot 2026-04-16 at 12 41 25" src="https://github.com/user-attachments/assets/7f003b24-8e76-4077-9eac-9c440f2520bb" />
+
 ---
 
 ## Requirements
@@ -377,9 +380,6 @@ docker compose down
 ---
 
 ## Dashboard Panels
-
-<img width="1495" height="896" alt="Screenshot 2026-04-16 at 12 41 25" src="https://github.com/user-attachments/assets/7f003b24-8e76-4077-9eac-9c440f2520bb" />
-
 
 | Panel | Type | Query window | Description |
 |-------|------|-------------|-------------|
