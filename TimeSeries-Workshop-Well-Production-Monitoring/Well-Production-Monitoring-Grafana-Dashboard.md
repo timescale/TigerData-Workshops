@@ -378,6 +378,9 @@ docker compose down
 
 ## Dashboard Panels
 
+<img width="1495" height="896" alt="Screenshot 2026-04-16 at 12 41 25" src="https://github.com/user-attachments/assets/7f003b24-8e76-4077-9eac-9c440f2520bb" />
+
+
 | Panel | Type | Query window | Description |
 |-------|------|-------------|-------------|
 | Active Wells | Stat | — | Count of wells with `status = Active` |
