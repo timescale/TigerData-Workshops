@@ -402,4 +402,3 @@ docker compose down
 | `error parsing postgres url` | `url` field contains a `postgres://` connection string | Set `url` to `host:port` only — no scheme or credentials |
 | `no default database configured` | Grafana provisioning doesn't persist the `database` field on first load | Open the datasource in the UI, set **Database** to `tsdb`, click **Save & Test** |
 | Panels show "No data" | Time range doesn't overlap with loaded data | Expand the time picker; data runs 90 days back from the load date |
-| Dashboard not visible | `well-production.json` placed in `provisioning/dashboards/` instead of `dashboards/` | File must be in `grafana/dashboards/`, not inside the `provisioning/` tree 
