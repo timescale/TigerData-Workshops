@@ -1,0 +1,230 @@
+{
+  "title": "Well Production Monitoring",
+  "uid": "well-production-v1",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active Wells",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "tigercloud" },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": { "color": { "fixedColor": "green", "mode": "fixed" } }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "tigercloud" },
+        "rawQuery": true,
+        "rawSql": "SELECT COUNT(*) AS \"Active Wells\" FROM wells WHERE status = 'Active'",
+        "format": "table",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Avg Oil Rate — last 2h (BOPD)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "tigercloud" },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "dark-green", "mode": "fixed" },
+          "decimals": 1
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "tigercloud" },
+        "rawQuery": true,
+        "rawSql": "SELECT ROUND(AVG(oil_rate)::numeric, 1) AS \"Avg Oil (BOPD)\" FROM well_production WHERE time > NOW() - INTERVAL '2 hours'",
+        "format": "table",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Avg Gas Rate — last 2h (MCFD)",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "tigercloud" },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "blue", "mode": "fixed" },
+          "decimals": 1
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "tigercloud" },
+        "rawQuery": true,
+        "rawSql": "SELECT ROUND(AVG(gas_rate)::numeric, 1) AS \"Avg Gas (MCFD)\" FROM well_production WHERE time > NOW() - INTERVAL '2 hours'",
+        "format": "table",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Avg Wellhead Pressure — last 2h (PSI)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "tigercloud" },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "orange", "mode": "fixed" },
+          "decimals": 0
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "tigercloud" },
+        "rawQuery": true,
+        "rawSql": "SELECT ROUND(AVG(wellhead_pressure)::numeric, 0) AS \"Avg WHP (PSI)\" FROM well_production WHERE time > NOW() - INTERVAL '2 hours'",
+        "format": "table",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Total Oil & Gas Production",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "tigercloud" },
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 8 } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Gas (MCFD)" },
+            "properties": [{ "id": "custom.axisPlacement", "value": "right" }]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "tigercloud" },
+        "rawQuery": true,
+        "rawSql": "SELECT time_bucket('4 hours', time) AS time, ROUND(SUM(oil_rate)::numeric, 0) AS \"Oil (BOPD)\", ROUND(SUM(gas_rate)::numeric, 0) AS \"Gas (MCFD)\" FROM well_production WHERE $__timeFilter(time) GROUP BY 1 ORDER BY 1",
+        "format": "time_series",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Avg Wellhead Pressure by Basin",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "postgres", "uid": "tigercloud" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 5 },
+          "unit": "psi"
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "tigercloud" },
+        "rawQuery": true,
+        "rawSql": "SELECT time_bucket('4 hours', wp.time) AS time, w.field_name AS metric, ROUND(AVG(wp.wellhead_pressure)::numeric, 0) AS value FROM well_production wp JOIN wells w ON wp.well_id = w.id WHERE $__timeFilter(wp.time) GROUP BY 1, 2 ORDER BY 1",
+        "format": "time_series",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Water Cut % Over Time",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+      "datasource": { "type": "postgres", "uid": "tigercloud" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 8 },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "tigercloud" },
+        "rawQuery": true,
+        "rawSql": "SELECT time_bucket('4 hours', time) AS time, ROUND((SUM(water_rate) / NULLIF(SUM(oil_rate) + SUM(water_rate), 0) * 100)::numeric, 1) AS \"Water Cut %\" FROM well_production WHERE $__timeFilter(time) GROUP BY 1 ORDER BY 1",
+        "format": "time_series",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Top Wells by Avg Oil Rate",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 22 },
+      "datasource": { "type": "postgres", "uid": "tigercloud" },
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "displayMode": "gradient"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "continuous-GrYlRd" },
+          "unit": "none"
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "tigercloud" },
+        "rawQuery": true,
+        "rawSql": "SELECT w.well_name AS \"metric\", ROUND(AVG(wp.oil_rate)::numeric, 1) AS \"value\" FROM well_production wp JOIN wells w ON wp.well_id = w.id WHERE $__timeFilter(wp.time) AND w.status = 'Active' GROUP BY w.well_name ORDER BY 2 DESC LIMIT 10",
+        "format": "table",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Field Production Summary",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 22 },
+      "datasource": { "type": "postgres", "uid": "tigercloud" },
+      "options": {
+        "sortBy": [{ "displayName": "Avg Oil (BOPD)", "desc": true }],
+        "footer": { "show": false }
+      },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left" } }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "tigercloud" },
+        "rawQuery": true,
+        "rawSql": "SELECT w.field_name AS \"Basin\", w.production_type AS \"Type\", COUNT(DISTINCT wp.well_id) AS \"Wells\", ROUND(AVG(wp.oil_rate)::numeric, 1) AS \"Avg Oil (BOPD)\", ROUND(AVG(wp.gas_rate)::numeric, 1) AS \"Avg Gas (MCFD)\", ROUND(AVG(wp.water_rate)::numeric, 1) AS \"Avg Water (BWPD)\", ROUND(AVG(wp.wellhead_pressure)::numeric, 0) AS \"Avg WHP (PSI)\" FROM well_production wp JOIN wells w ON wp.well_id = w.id WHERE $__timeFilter(wp.time) AND w.status = 'Active' GROUP BY 1, 2 ORDER BY 4 DESC NULLS LAST",
+        "format": "table",
+        "refId": "A"
+      }]
+    }
+  ]
+}
