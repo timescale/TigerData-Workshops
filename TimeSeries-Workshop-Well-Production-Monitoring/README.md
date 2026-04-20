@@ -175,7 +175,8 @@ psql "postgres://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=require"
 | Compliance and long-term retention | Tiered storage retains all data; retention policies control raw costs |
 
 
-### Optional Instructions — Well Production Monitoring (Grafana Dashboard)
+
+# Optional Instructions — Well Production Monitoring (Grafana Dashboard)
 
 Local Grafana instance provisioned via Docker, backed by a [Tiger Cloud](https://tigerdata.com) TimescaleDB service. Visualizes 15-minute wellhead telemetry across 20 wells spanning four U.S. basins.
 
