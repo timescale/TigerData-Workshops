@@ -2,6 +2,7 @@
 
 This repository contains materials for various workshops created by TigerData, demonstrating the power of TimescaleDB for different applications.
 
+
 ## Prerequisites
 
 - TigerData Cloud account (get free 30 days at <https://console.cloud.timescale.com/signup>)
