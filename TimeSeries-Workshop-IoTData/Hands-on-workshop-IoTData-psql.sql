@@ -101,7 +101,7 @@ CREATE TABLE sensor_data (
 -- Attribute filtering - SELECT count(*) WHERE device_id BETWEEN 1000 AND 1100
 -- Exclusion queries - SELECT count(*) WHERE device_id > 4000
 
--- Alternatively, you can exculde tsdb.sparse_index='minmax(temperature), minmax(humidity)' line from 
+-- Alternatively, you can exclude tsdb.sparse_index='minmax(temperature), minmax(humidity)' line from 
 -- Hypertable creation and create the index manually subsequently once you confirm the query pattern
 
 ALTER TABLE sensor_data SET (
@@ -142,10 +142,6 @@ SELECT
   random()*100 AS temperature
 FROM generate_series(now() - interval '60 days', now(), interval '5 seconds') AS g1(time), generate_series(1,4,1) AS g2(sensor_id);
 
--- ## Load data from S3 - Optional
--- ============================================================================
--- Ingest IoT device data from S3 via Online S3 Connector
---e.g. s3://dario-demo-data/sensor_data.csv
 
 -- ============================================================================
 -- ## Examine Hypertable Partitions
@@ -274,7 +270,11 @@ ORDER BY period;
 -- You can turn compression on either via policy so it automatically compress chunks after a specified period or
 -- manually compress hypertable chunks via compress_chunk() function.
 
-CALL add_columnstore_policy('sensor_data', after => INTERVAL '7 days');
+-- A default 7-day columnstore policy is auto-created when the hypertable is
+-- created with tsdb.enable_columnstore = true. Remove it first so this call is
+-- idempotent (and so a custom interval would actually take effect).
+CALL remove_columnstore_policy('sensor_data');
+CALL add_columnstore_policy('sensor_data', after => INTERVAL '1 days');
 
 -- ### Manually compress all the chunks of the hypertable
 -- TODO: switch to convert_to_columnarstore()?
@@ -298,9 +298,9 @@ FROM hypertable_compression_stats('sensor_data');
 -- To check the compression ration on a per chunk basis:
 SELECT 
 c.chunk_name,
-to_timestamp(c.range_start_integer/1000) as range_start,
-to_timestamp(c.range_end_integer/1000) as range_end,
-to_timestamp(c.range_end_integer/1000) - to_timestamp(c.range_start_integer/1000) as chunk_length,
+c.range_start,
+c.range_end,
+c.range_end - c.range_start as chunk_length,
 c.is_compressed,
 CASE
    WHEN s.before_compression_total_bytes IS NOT NULL

@@ -368,6 +368,10 @@ ORDER BY avg_oil_bopd DESC;
 
 -- Columnstore is already enabled via tsdb.enable_columnstore = true at 
 -- table creation — no separate policy call needed.
+-- A default 7-day columnstore policy is auto-created when the hypertable is
+-- created with tsdb.enable_columnstore = true. Remove it first so this call is
+-- idempotent (and so a custom interval would actually take effect).
+CALL remove_columnstore_policy('well_production');
 CALL add_columnstore_policy('well_production', after => INTERVAL '7 days');
 
 -- Optionally, manually compress all chunks to see immediate storage savings

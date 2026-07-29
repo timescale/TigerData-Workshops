@@ -11,7 +11,7 @@ This workshop demonstrates how to work with TigerData using Tiger MCP tools and 
   - [Connect Tiger MCP to Your AI Assistant](#connect-tiger-mcp-to-your-ai-assistant)
   - [Test the Integration](#test-the-integration)
 - [Workshop Exercises](#workshop-exercises)
-  - [1. Generate Sample Data (Optional)](#1-generate-sample-data-optional)
+  - [1. Generate Sample Data (required)](#1-generate-sample-data-required)
   - [2. Create Database and Schema](#2-create-database-and-schema)
   - [3. Data Analysis](#3-data-analysis)
   - [4. Performance Analysis](#4-performance-analysis)
@@ -101,11 +101,11 @@ The response should include tools like:
 
 ## Workshop Exercises
 
-### 1. Generate Sample Data (Optional)
+### 1. Generate Sample Data (required)
 
-Github repo already includes `data.csv` and `sensors.csv` files. You can use these and skip this section. Note: the data might be from the older time range.
+This workshop uses two CSV files — `data.csv` (time-series sensor readings) and `sensors.csv` (per-sensor metadata). They are **generated locally by the script below and are not committed to the repo**, so generate them before continuing (steps 2+ read these files).
 
-The repository includes a Python script to generate sample time-series sensor data. This script was created by Claude Code using AI-assisted development.
+The repository includes a Python script to generate the sample time-series sensor data. It uses only the Python standard library (no `pip install` needed). This script was created by Claude Code using AI-assisted development.
 
 **Original prompt used to create the script:**
 

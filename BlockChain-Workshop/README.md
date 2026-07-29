@@ -30,7 +30,18 @@ The dataset includes three main components:
 
 - TigerData Cloud account (get free 30 days at <https://console.cloud.timescale.com/signup>)
 - psql CLI installed ([installation guide](https://www.tigerdata.com/blog/how-to-install-psql-on-mac-ubuntu-debian-windows))
+- `wget` and `gunzip` installed locally — the script downloads the dataset with `wget` and loads it via `\COPY ... FROM PROGRAM 'gunzip -c ...'`, both of which run on your machine (macOS: `brew install wget`; `gunzip` ships with macOS/Linux)
 - Basic understanding of SQL and blockchain concepts
+
+## Data
+
+The workshop is **not** shipped with data — `Bitcoin-BlockChain.sql` downloads it at runtime (via `wget`) into the workshop folder and loads it with `\COPY`:
+
+- `900000_900999_blocks.csv.gz` — block metadata
+- `900000_900999_transactions.csv.gz` — transactions
+- `900000_900999_tx_vinout.csv.gz` — transaction inputs/outputs
+
+These `.csv.gz` files are downloaded at runtime (from Timescale's public demo-data bucket) and are git-ignored; delete them when you're done.
 
 ## Database Schema
 

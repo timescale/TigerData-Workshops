@@ -17,6 +17,16 @@
 
 
 -- ============================================================================
+-- ## Setup: Drop Existing Objects
+-- ============================================================================
+-- Makes the workshop re-runnable. CASCADE also drops the oee_1h continuous
+-- aggregate that depends on oee_timeseries.
+
+DROP TABLE IF EXISTS oee_timeseries CASCADE;
+DROP TABLE IF EXISTS production_lines CASCADE;
+
+
+-- ============================================================================
 -- ## Create Main OEE Hypertable
 -- ============================================================================
 -- Main OEE time-series table for three production lines A, B, C
@@ -352,19 +362,15 @@ SELECT generate_oee_timeseries_demo(7, 5);
 -- Enable compression and add a compression policy
 -- to compress chunks older than 24 hours.
 
-ALTER TABLE oee_timeseries
-SET (
-  timescaledb.compress = true,
-  timescaledb.compress_segmentby = 'line_id',
-  timescaledb.compress_orderby   = 'time DESC'
-);
+-- Columnstore is already enabled by the segmentby/orderby settings in the
+-- CREATE TABLE above, which also auto-creates a default 7-day columnstore
+-- policy. Remove it and add a 24-hour policy so completed shifts compress sooner.
+CALL remove_columnstore_policy('oee_timeseries');
+CALL add_columnstore_policy('oee_timeseries', after => INTERVAL '24 hours');
 
--- Add compression policy: compress chunks older than 24 hours
-SELECT add_compression_policy(
-  'oee_timeseries',
-  INTERVAL '24 hours',
-  if_not_exists => true
-);
+-- Compress the existing chunks now so the storage-savings query below has data
+-- to report (the policy alone only affects chunks as they age past 24 hours):
+SELECT compress_chunk(c, true) FROM show_chunks('oee_timeseries') c;
 
 -- ============================================================================
 -- ## Inspect Hypertable Chunks & Compression Stats

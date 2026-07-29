@@ -671,6 +671,10 @@ ORDER BY ps.substage_number;
 -- Columnstore is already enabled via tsdb.enable_columnstore = true at 
 -- table creation — no separate policy call needed. 
 
+-- A default 7-day columnstore policy is auto-created when the hypertable is
+-- created with tsdb.enable_columnstore = true. Remove it first so the 12-hour
+-- interval below actually takes effect (otherwise the call errors 42710).
+CALL remove_columnstore_policy('frac_telemetry');
 CALL add_columnstore_policy('frac_telemetry', after => INTERVAL '12 hours');
 
 -- Compress all existing chunks immediately to observe storage savings:
@@ -793,7 +797,7 @@ INSERT INTO frac_telemetry (
   treating_pressure_psi, slurry_rate_bpm, proppant_concentration_ppg,
   bottomhole_pressure_psi, hydrostatic_pressure_psi, slurry_density_ppg
 )
-VALUES (NOW(), 1, 8250.0, 79.5, 1.50, 10350.0, 9620.0, 9.58);
+VALUES (NOW() + INTERVAL '5 minutes', 1, 8250.0, 79.5, 1.50, 10350.0, 9620.0, 9.58);
 
 SELECT
   minute,
@@ -814,13 +818,16 @@ ORDER BY minute DESC;
 -- ## Tier Data to S3 Storage
 -- ============================================================================
 -- Completed frac jobs are queried infrequently after post-job analysis.
--- TigerData tiered storage moves data older than 30 days to low-cost S3
+-- TigerData tiered storage moves data older than 14 days to low-cost S3
 -- while retaining full SQL queryability — no query rewrites required.
 --
 -- Enable tiered storage first in the TigerData Console:
 --   Service → Explorer → Storage Configuration → Tiering Storage → Enabled
 
-SELECT add_tiering_policy('frac_telemetry', INTERVAL '30 days');
+SELECT remove_tiering_policy('frac_telemetry');
+
+SELECT MIN(time) FROM frac_telemetry;  -- oldest row in the hypertable
+SELECT add_tiering_policy('frac_telemetry', INTERVAL '1 days');
 
 -- Enable tiered reads for this session:
 ALTER DATABASE tsdb SET timescaledb.enable_tiered_reads TO true;
@@ -831,6 +838,7 @@ WHERE hypertable_name = 'frac_telemetry';
 
 SELECT * FROM timescaledb_osm.tiered_chunks
 WHERE hypertable_name = 'frac_telemetry';
+
 
 
 -- ============================================================================

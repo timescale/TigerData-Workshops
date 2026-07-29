@@ -259,9 +259,10 @@ SELECT
        WHEN heart_rate < 60 THEN 'Bradycardia'
    END AS condition
 FROM health_data
-WHERE heart_rate > 99 OR heart_rate < 60
-AND time >= NOW() - INTERVAL '1 day'
+WHERE (heart_rate > 99 OR heart_rate < 60)
+  AND time >= NOW() - INTERVAL '1 day'
 ORDER BY time DESC;
+
 
 
 -- ### Average vital signs by 1-hour windows
@@ -305,6 +306,7 @@ JOIN users u ON wd.user_id = u.id
 WHERE time >= NOW() - INTERVAL '1 week'
 GROUP BY date, u.name
 ORDER BY date DESC, u.name;
+
 
 
 -- ### Monitor blood pressure trends for hypertensive patients
@@ -397,6 +399,10 @@ SELECT compress_chunk(c, true) FROM show_chunks('health_data') c;
 -- ### Automatically compress Hypertable with a policy
 -- Create a job that automatically converts chunks in a hypertable to the
 -- columnstore older than 7 days. This is a preferred way to compress data in production.
+-- A default 7-day columnstore policy is auto-created when the hypertable is
+-- created with columnstore configured (segmentby/orderby). Remove it first so
+-- this call is idempotent (and so a custom interval would actually take effect).
+CALL remove_columnstore_policy('health_data');
 CALL add_columnstore_policy('health_data', after => INTERVAL '7d');
 
 
@@ -518,13 +524,15 @@ INSERT INTO health_data (
    blood_pressure_diastolic, spo2, body_temperature,
    steps_count, sleep_quality_score, activity_level
 ) VALUES (
-   NOW(), 99, 72, 118, 78, 98.5, 36.8, 5000, 85.0, 'moderate'
+   NOW() + INTERVAL '1 day', 99, 72, 118, 78, 98.5, 36.8, 5000, 85.0, 'moderate'
 );
 
 
--- Verify real-time update in continuous aggregate
-SELECT * FROM health_data
-WHERE time >= NOW() - INTERVAL '5 minutes';
+-- Verify the real-time update in the continuous aggregate (not the raw table).
+-- The inserted row is above the materialization watermark, so it appears immediately.
+SELECT day, device_id, ROUND(avg_heart_rate::numeric, 1) AS avg_heart_rate, readings_count
+FROM daily_health_summary
+WHERE device_id = 99;
 
 -- As you can see, the continuous aggregate view is automatically updated with
 -- the new data. This is the stark contrast to standard Postgres Materialized
@@ -536,7 +544,10 @@ WHERE time >= NOW() - INTERVAL '5 minutes';
 -- ============================================================================
 -- ## Tier data to S3 storage (older than 30 days)
 -- ============================================================================
-SELECT add_retention_policy('health_data', INTERVAL '1 year');
+-- Tiered storage must be enabled for the service first
+-- (Service -> Explorer -> Storage Configuration -> Tiering Storage -> Enabled).
+SELECT remove_tiering_policy('health_data');
+SELECT add_tiering_policy('health_data', INTERVAL '14 days');
 
 
 -- Enable/disable tiered reads for all future sessions
@@ -545,7 +556,8 @@ ALTER DATABASE tsdb SET timescaledb.enable_tiered_reads to true;
 
 
 -- List tiered chunks
-SELECT * FROM timescaledb_osm.tiered_chunks;
+SELECT * FROM timescaledb_osm.tiered_chunks 
+WHERE hypertable_name = 'health_data';
 
 
 -- List chunks scheduled for tiering

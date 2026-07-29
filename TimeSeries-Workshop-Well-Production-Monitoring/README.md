@@ -119,6 +119,8 @@ Volume reference:
 Automatically compress production telemetry older than 7 days:
 
 ```sql
+-- A default 7-day columnstore policy is auto-created at table creation; remove it first:
+CALL remove_columnstore_policy('well_production');
 CALL add_columnstore_policy('well_production', after => INTERVAL '7 days');
 ```
 

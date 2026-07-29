@@ -147,6 +147,10 @@ LIMIT 10;
 -- ============================================================================
 -- ## Calculate One-Day Candlestick Data on Non-Compressed Hypertable
 -- ============================================================================
+-- The Twelve Data sample is historical, so the "last 14 days" window is anchored
+-- to the most recent tick in the table — (SELECT max(time) FROM crypto_ticks) —
+-- rather than now(). That way these queries return data whenever you run the
+-- workshop, regardless of the sample's capture date.
 
 SELECT
     time_bucket('1 day', time) AS bucket,
@@ -158,7 +162,7 @@ SELECT
     LAST(day_volume, time)      AS day_volume
 FROM crypto_ticks
 WHERE symbol = 'BTC/USD' 
-  AND time >= NOW() - INTERVAL '14 days'
+  AND time >= (SELECT max(time) FROM crypto_ticks) - INTERVAL '14 days'
 GROUP BY bucket, symbol
 ORDER BY bucket;
 
@@ -171,7 +175,7 @@ ORDER BY bucket;
 -- To enable columnarstore, you need to set the timescaledb.enable_columnstore 
 -- parameter to true. This parameter is set at the table level, so you need to 
 -- run the ALTER TABLE command on the crypto_ticks hypertable.
--- The timescaledb.compress_orderby parameter specifies the order in which the 
+-- The timescaledb.orderby parameter specifies the order in which the 
 -- data is compressed.
 -- The timescaledb.segmentby parameter specifies the column by which the data 
 -- is segmented. The segmentby column is used to group the data into segments, 
@@ -181,7 +185,7 @@ ALTER TABLE crypto_ticks
 SET (
     timescaledb.enable_columnstore = true, 
     timescaledb.segmentby = 'symbol',
-    timescaledb.compress_orderby = 'time DESC'
+    timescaledb.orderby = 'time DESC'
 );
 
 -- Enabling a columnarstore for the table by itself does not compress the data.
@@ -231,7 +235,7 @@ SELECT
     LAST(day_volume, time)      AS day_volume
 FROM crypto_ticks
 WHERE symbol = 'BTC/USD' 
-  AND time >= NOW() - INTERVAL '14 days'
+  AND time >= (SELECT max(time) FROM crypto_ticks) - INTERVAL '14 days'
 GROUP BY bucket, symbol
 ORDER BY bucket;
 
@@ -283,7 +287,7 @@ SELECT add_continuous_aggregate_policy('one_day_candle',
 SELECT * 
 FROM one_day_candle
 WHERE symbol = 'BTC/USD' 
-  AND bucket >= NOW() - INTERVAL '14 days'
+  AND bucket >= (SELECT max(bucket) FROM one_day_candle) - INTERVAL '14 days'
 ORDER BY bucket;
 
 -- ============================================================================
@@ -294,13 +298,13 @@ ORDER BY bucket;
 -- see how the continuous aggregate view is updated.
 
 INSERT INTO crypto_ticks (time, symbol, price, day_volume)
-VALUES (NOW() + INTERVAL '1day', 'BTC/USD', 110000, 30750246);
+VALUES ((SELECT max(time) FROM crypto_ticks) + INTERVAL '1 day', 'BTC/USD', 120000, 30750246);
 
-SELECT * 
+SELECT *
 FROM one_day_candle
-WHERE symbol = 'BTC/USD' 
-  AND bucket >= NOW() - INTERVAL '14 days'
-ORDER BY bucket;
+WHERE symbol = 'BTC/USD'
+  AND bucket >= (SELECT max(bucket) FROM one_day_candle) - INTERVAL '14 days'
+ORDER BY bucket DESC; -- to see the most recently inserted row first
 
 -- As you can see, the continuous aggregate view is automatically updated with 
 -- the new data. This is the stark contrast to standard Postgres Materialized 

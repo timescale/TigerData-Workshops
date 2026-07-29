@@ -439,81 +439,30 @@ list my tigerdata services
 
 ## Step 10: Download Workshop Materials
 
-The workshop uses sample CSV files with time-series sensor data. You need to download these files to your computer.
+Clone the repository and generate the sample data — the workshop runs directly from the cloned files.
 
-### Option A: Clone the Repository (Recommended if you have Git)
-
-**Check if you have Git installed:**
+**Check that Git is installed:**
 
 ```bash
 git --version
 ```
 
-If you see a version number, you have Git. If not, see "Option B" below.
+If you don't see a version number, install Git from <https://git-scm.com/downloads> (or use your OS package manager), then continue.
 
-**Clone the repository:**
+**Clone the repository and enter the workshop folder:**
 
 ```bash
 git clone https://github.com/timescale/TigerData-Workshops.git
-```
-
-**Navigate to the workshop directory:**
-
-```bash
 cd TigerData-Workshops/Agentic-Postgres-Workshop
 ```
 
-**Verify the files are there:**
+**Generate the sample data files.** `data.csv` and `sensors.csv` are created locally by the script (they are not committed to the repo), using only the Python standard library:
 
 ```bash
-ls
+python generate_sensor_data.py
 ```
 
-You should see files including `data.csv` and `sensors.csv`.
-
-### Option B: Download Files Manually (If you don't have Git)
-
-**For macOS and Linux (using curl):**
-
-Create a directory for the workshop:
-
-```bash
-mkdir -p ~/agentic-postgres-workshop
-cd ~/agentic-postgres-workshop
-```
-
-Download the CSV files:
-
-```bash
-curl -O https://raw.githubusercontent.com/timescale/TigerData-Workshops/main/Agentic-Postgres-Workshop/data.csv
-
-curl -O https://raw.githubusercontent.com/timescale/TigerData-Workshops/main/Agentic-Postgres-Workshop/sensors.csv
-```
-
-**For Windows (using PowerShell):**
-
-Create a directory:
-
-```powershell
-mkdir $HOME\agentic-postgres-workshop
-cd $HOME\agentic-postgres-workshop
-```
-
-Download the CSV files:
-
-```powershell
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/timescale/TigerData-Workshops/main/Agentic-Postgres-Workshop/data.csv" -OutFile "data.csv"
-
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/timescale/TigerData-Workshops/main/Agentic-Postgres-Workshop/sensors.csv" -OutFile "sensors.csv"
-```
-
-### Option C: Download via Web Browser
-
-1. Visit: [https://github.com/timescale/TigerData-Workshops/tree/main/Agentic-Postgres-Workshop](https://github.com/timescale/TigerData-Workshops/tree/main/Agentic-Postgres-Workshop)
-2. Click on `data.csv`, then click "Download" or "Raw" button
-3. Save the file to a folder on your computer (e.g., `Documents/agentic-postgres-workshop`)
-4. Repeat for `sensors.csv`
-5. Remember the folder location - you'll need it during the workshop!
+This creates `data.csv` and `sensors.csv` in the current directory.
 
 ### Verify Your Files
 
@@ -575,19 +524,18 @@ dir *.csv
 3. Completely quit and restart Gemini CLI
 4. Try asking "what tools do you have access to?" again
 
-### Problem: Cannot download CSV files
+### Problem: `python generate_sensor_data.py` fails or produces no files
 
 **Solution:**
-- Check your internet connection
-- Try the alternative download method (web browser)
-- Visit the GitHub repository directly and download files manually
-- Make sure you're using the correct URLs
+- Make sure you're in the `TigerData-Workshops/Agentic-Postgres-Workshop` folder — the script writes `data.csv` and `sensors.csv` to the current directory
+- If `python` is not found, try `python3`
+- The script uses only the Python standard library, so no `pip install` is needed
+- Re-run it any time; it overwrites the two CSV files
 
-### Problem: Git not installed (when trying Option A)
+### Problem: Git not installed
 
 **Solution:**
-- Use Option B (curl/PowerShell) or Option C (web browser) instead
-- Or install Git:
+- Install Git, then re-run the clone step:
   - macOS: Run `xcode-select --install`
   - Windows: Download from [git-scm.com](https://git-scm.com)
   - Linux: Run `sudo apt install git` (Ubuntu/Debian) or `sudo yum install git` (RedHat/CentOS)
@@ -621,7 +569,7 @@ Before attending the workshop, verify you can do the following:
 - [ ] Run `gemini` and interact with the AI assistant
 - [ ] Ask Gemini "what tools do you have access to?" and see Tiger tools listed
 - [ ] Ask Gemini "list my tigerdata services" and get a response (even if empty)
-- [ ] Have `data.csv` and `sensors.csv` files downloaded and accessible
+- [ ] Have generated `data.csv` and `sensors.csv` (`python generate_sensor_data.py`) and know their location
 - [ ] Know the location of your workshop files folder
 
 **If you can check all these boxes, you're ready for the workshop!**
