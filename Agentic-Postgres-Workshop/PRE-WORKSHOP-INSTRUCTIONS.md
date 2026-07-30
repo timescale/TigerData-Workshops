@@ -89,42 +89,33 @@ You'll need to use your computer's command line interface (terminal) for this se
 
 ## Step 2: Install Antigravity CLI
 
-Antigravity CLI is an AI coding assistant from Google. It provides the AI capabilities we'll use to interact with databases during the workshop.
+Antigravity CLI is an AI coding assistant from Google, invoked with the `agy` command. It's a single native binary — **no Node.js, npm, or other package manager required** — that verifies its own checksum and auto-updates.
 
 ### Installation Instructions
 
 **For macOS and Linux:**
 
-Run the official installer:
-
 ```bash
 curl -fsSL https://antigravity.google/cli/install.sh | bash
 ```
 
-Alternatively, you can install with a package manager (verify the exact package/formula name before use):
-
-<!-- TODO: confirm the npm package name for Antigravity CLI -->
-```bash
-npm install -g <TODO-antigravity-npm-package>
-```
-
-<!-- TODO: confirm the Homebrew formula for Antigravity CLI (if brew is not installed, see https://brew.sh/) -->
-```bash
-brew install <TODO-antigravity-brew-formula>
-```
-
-**Expected output:** You should see messages about downloading and installing Antigravity CLI.
-
 **For Windows (PowerShell):**
 
-<!-- TODO: confirm the Windows (PowerShell) install command for Antigravity CLI -->
 ```powershell
-<TODO-antigravity-windows-installer>
+irm https://antigravity.google/cli/install.ps1 | iex
 ```
+
+**For Windows (Command Prompt):**
+
+```cmd
+curl -fsSL https://antigravity.google/cli/install.cmd -o install.cmd && install.cmd && del install.cmd
+```
+
+**Expected output:** The installer downloads the `agy` binary, verifies its checksum, and prints a line to add to your shell profile if its install directory isn't already on your `PATH`.
 
 ### Verify Installation
 
-After installation completes, verify it worked by running:
+After installation completes, open a new terminal and verify it worked:
 
 ```bash
 agy --version
@@ -141,30 +132,31 @@ agy --version
 
 ## Step 3: Authenticate Antigravity CLI
 
-Now authenticate Antigravity CLI so it can use your account.
+Antigravity CLI has **no separate login command** — it authenticates automatically the first time you launch it and caches your credentials in your operating system's keyring (Keychain on macOS), so you won't need to repeat this.
 
 ### Authentication Steps
 
-1. Start the authentication flow:
+1. Launch Antigravity CLI for the first time:
 
-<!-- TODO: confirm the exact auth command/verb for Antigravity CLI -->
 ```bash
-agy auth login
+agy
 ```
 
 2. **Expected behavior:**
-   - Your web browser opens a **Google Antigravity** page that reads "Paste this code into your application to complete authentication" and shows an authentication code
+   - Because no saved session exists yet, `agy` opens your default web browser
    - Sign in with your Google account if prompted
+   - The browser shows a **Google Antigravity** page that reads "Paste this code into your application to complete authentication" with an authentication code
    - Click **Copy to Clipboard** to copy the code
    - Return to your terminal and paste the code into the `agy` console to complete authentication
 
 3. **After pasting the code:**
-   - You should see a success message confirming you're authenticated
+   - You'll see a confirmation that you're signed in, and `agy` drops you into its interactive session
+   - Type `exit` (or press `Ctrl + C`) to leave for now — you'll use it again in the next step
 
 **If the browser doesn't open automatically:**
 - The terminal will display a URL
 - Copy the URL and open it in your web browser manually
-- Complete the flow to get the code, click **Copy to Clipboard**, then paste the code into the `agy` console
+- Complete the flow, click **Copy to Clipboard**, then paste the code into the `agy` console
 
 ---
 
