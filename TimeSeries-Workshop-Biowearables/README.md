@@ -159,6 +159,8 @@ GROUP BY day, device_id;
 Enable ~10x storage compression with improved query performance:
 
 ```sql
+-- A default 7-day columnstore policy is auto-created at table creation; remove it first:
+CALL remove_columnstore_policy('health_data');
 CALL add_columnstore_policy('health_data', after => INTERVAL '7d');
 ```
 
@@ -201,11 +203,23 @@ SELECT add_continuous_aggregate_policy(
 
 ### Using psql Command Line
 
-1. Follow the instructions in `analyze-bioweareables-data-psql.sql`
+Run the entire workshop non-interactively:
 
-2. The script will generate sample data and guide you through each step
+```bash
+psql "postgres://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=require" \
+  -f analyze-bioweareables-data-psql.sql
+```
 
-3. Includes timing comparisons to demonstrate performance improvements
+Or connect interactively and run the sections one at a time:
+
+```bash
+psql "postgres://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=require"
+```
+
+The script creates the tables, generates ~2M rows of sample health data (via
+`generate_series`), and walks through the analytics, compression, continuous
+aggregate, and real-time update steps — including timing comparisons that
+demonstrate the performance improvements.
 
 ## Workshop Highlights
 

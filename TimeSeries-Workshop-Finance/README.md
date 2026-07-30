@@ -32,9 +32,22 @@ This workshop demonstrates advanced time-series data analysis using PostgreSQL a
 
 - Optional, but recommended - install psql CLI https://www.tigerdata.com/blog/how-to-install-psql-on-mac-ubuntu-debian-windows
 
+- For the psql path only: `wget` and `unzip` must be installed locally — the script uses them to fetch and unpack the dataset (macOS: `brew install wget`; most Linux distros ship both). The Console/UI path needs neither.
+
 - Basic knowledge of SQL and financial data concepts
 
-## Data StructureThe workshop uses two main datasets:
+## Data
+
+The workshop is **not** shipped with data — the demo obtains it at runtime:
+
+- **psql path:** `analyze-financial-data-psql.sql` downloads `crypto_sample.zip` from Timescale's public bucket and unzips it to `tutorial_sample_assets.csv` (~25 asset rows) and `tutorial_sample_tick.csv` (~10.7M crypto tick rows), then `\COPY`s both into the tables.
+- **Console/UI path:** `analyze-financial-data-UI.sql` imports `crypto_assets.csv` and `crypto_ticks.csv` directly from `s3://timescale-demo-data/` via the Console's S3 import.
+
+These files are downloaded into the workshop folder at runtime and are git-ignored; delete them when you're done.
+
+## Data Structure
+
+The workshop uses two main datasets:
 
 ### Crypto Ticks Table
 
@@ -90,12 +103,10 @@ ORDER BY bucket;
 Enable ~10x storage compression with improved query performance:
 
 ```sql
-ALTER TABLE crypto_ticks 
-SET (
-    timescaledb.enable_columnstore = true, 
-    timescaledb.segmentby = 'symbol',
-    timescaledb.compress_orderby = 'time DESC'
-);
+-- Columnstore is enabled in the CREATE TABLE ... WITH (...) clause, which
+-- auto-creates a default 7-day policy. Replace it with a 1-day policy:
+CALL remove_columnstore_policy('crypto_ticks');
+CALL add_columnstore_policy('crypto_ticks', after => INTERVAL '1d');
 ```
 
 ### 4. Continuous Aggregates

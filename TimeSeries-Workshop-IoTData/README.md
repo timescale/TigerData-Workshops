@@ -103,7 +103,7 @@ SELECT
   sensor_id,
   random() AS cpu,
   random()*100 AS temperature
-FROM generate_series(now() - interval '30 days', now(), interval '5 seconds') AS g1(time), generate_series(1,4,1) AS g2(sensor_id);
+FROM generate_series(now() - interval '60 days', now(), interval '5 seconds') AS g1(time), generate_series(1,4,1) AS g2(sensor_id);
 ```
 
 #### Load data from S3 - Optional
@@ -113,7 +113,9 @@ e.g. s3://tiger-demo-data/sensor_data.csv
 ### 3. Columnar Compression 
 Automatically compress Hypertable via columnstore policy:
 ```sql
-CALL add_columnstore_policy('sensor_data', after => INTERVAL '1d');
+-- A default 7-day columnstore policy is auto-created at table creation; remove it first:
+CALL remove_columnstore_policy('sensor_data');
+CALL add_columnstore_policy('sensor_data', after => INTERVAL '1 days');
 ```
 
 ### 4. Continuous Aggregates
@@ -135,11 +137,23 @@ GROUP BY period, sensor_id;
 
 ### Using psql Command Line
 
-1. Follow the instructions in `Hands-on-workshop-IoTData-psql.sql`
+Run the entire workshop non-interactively:
 
-2. The script will guide you through each step
+```bash
+psql "postgres://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=require" \
+  -f Hands-on-workshop-IoTData-psql.sql
+```
 
-3. Includes timing comparisons to demonstrate performance improvements
+Or connect interactively and run the sections one at a time:
+
+```bash
+psql "postgres://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=require"
+```
+
+The script creates the tables, simulates the sensor dataset (via
+`generate_series`), and walks through the analytics, compression, continuous
+aggregate, and real-time update steps — including timing comparisons that
+demonstrate the performance improvements.
 
 
 ## Workshop Highlights

@@ -174,6 +174,10 @@ LIMIT 10;
 -- ============================================================================
 -- ## Calculate One-Day Candlestick Data on Non-Compressed Hypertable
 -- ============================================================================
+-- The Twelve Data sample is historical, so the "last 14 days" window is anchored
+-- to the most recent tick in the table — (SELECT max(time) FROM crypto_ticks) —
+-- rather than now(). That way these queries return data whenever you run the
+-- workshop, regardless of the sample's capture date.
 
 SELECT
     time_bucket('1 day', time) AS bucket,
@@ -185,7 +189,7 @@ SELECT
     LAST(day_volume, time)      AS day_volume
 FROM crypto_ticks
 WHERE symbol = 'BTC/USD' 
-  AND time >= NOW() - INTERVAL '14 days'
+  AND time >= (SELECT max(time) FROM crypto_ticks) - INTERVAL '14 days'
 GROUP BY bucket, symbol
 ORDER BY bucket;
 
@@ -202,9 +206,16 @@ ORDER BY bucket;
 SELECT compress_chunk(c, true) FROM show_chunks('crypto_ticks') c;
 -- SELECT decompress_chunk(c, true) FROM show_chunks('crypto_ticks') c;
 
+
 -- ### Automatically compress Hypertable with a policy
--- Create a job that automatically converts chunks in a hypertable to the 
--- columnstore older than 1 day. This is a preferred way to compress data in production.
+-- a default columnstore compression policy is created when the hypertable is created. 
+-- The default policy compresses chunks older than 7 days. If you want to change the 
+-- default policy, you can remove it and create a new one.
+CALL remove_columnstore_policy('crypto_ticks');
+
+-- Set the new policy to automatically converts chunks in a hypertable to the 
+-- columnstore when they are older than 1 day. 
+-- This is a preferred way to compress data in production.
 CALL add_columnstore_policy('crypto_ticks', after => INTERVAL '1d');
 
 -- ============================================================================
@@ -236,7 +247,7 @@ SELECT
     LAST(day_volume, time)      AS day_volume
 FROM crypto_ticks
 WHERE symbol = 'BTC/USD' 
-  AND time >= NOW() - INTERVAL '14 days'
+  AND time >= (SELECT max(time) FROM crypto_ticks) - INTERVAL '14 days'
 GROUP BY bucket, symbol
 ORDER BY bucket;
 
@@ -288,7 +299,7 @@ SELECT add_continuous_aggregate_policy('one_day_candle',
 SELECT * 
 FROM one_day_candle
 WHERE symbol = 'BTC/USD' 
-  AND bucket >= NOW() - INTERVAL '14 days'
+  AND bucket >= (SELECT max(bucket) FROM one_day_candle) - INTERVAL '14 days'
 ORDER BY bucket;
 
 -- ============================================================================
@@ -299,13 +310,13 @@ ORDER BY bucket;
 -- see how the continuous aggregate view is updated.
 
 INSERT INTO crypto_ticks (time, symbol, price, day_volume)
-VALUES (NOW() + INTERVAL '1day', 'BTC/USD', 120000, 30750246);
+VALUES ((SELECT max(time) FROM crypto_ticks) + INTERVAL '1 day', 'BTC/USD', 120000, 30750246);
 
 SELECT * 
 FROM one_day_candle
 WHERE symbol = 'BTC/USD' 
-  AND bucket >= NOW() - INTERVAL '14 days'
-ORDER BY bucket;
+  AND bucket >= (SELECT max(bucket) FROM one_day_candle) - INTERVAL '14 days'
+ORDER BY bucket DESC; -- to see the most recently inserted row first
 
 -- As you can see, the continuous aggregate view is automatically updated with 
 -- the new data. This is the stark contrast to standard Postgres Materialized 

@@ -47,8 +47,8 @@ analytics** at scale.
 
 ## Contents
 
--   **`OEE_Workshop.sql`** -- Complete SQL workshop script (not included
-    in this file)
+-   **`OEE_Workshop.sql`** -- the complete SQL workshop script; run it end to
+    end (see [Getting Started](#getting-started))
 
 ## Prerequisites
 
@@ -56,6 +56,32 @@ analytics** at scale.
 -   Optional: Install the `psql` CLI\
 -   Your connection string for TigerData\
 -   Basic SQL knowledge
+
+## Getting Started
+
+### Using psql
+
+Run the entire workshop non-interactively:
+
+```bash
+psql "postgres://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=require" \
+  -f OEE_Workshop.sql
+```
+
+Or connect interactively and run the sections one at a time:
+
+```bash
+psql "postgres://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=require"
+```
+
+### Using the TigerData Console
+
+Open the **Data** tab, create a new query, and paste the contents of
+`OEE_Workshop.sql` (or run it section by section).
+
+The script creates the schema, generates 7 days of demo data, enables
+compression, builds the 1-hour continuous aggregate, and runs the example
+queries end to end.
 
 ## Data Model
 
@@ -113,14 +139,13 @@ SELECT generate_oee_timeseries_demo(7, 5);
 ## Compression
 
 ``` sql
-ALTER TABLE oee_timeseries
-SET (
-  timescaledb.compress = true,
-  timescaledb.compress_segmentby = 'line_id',
-  timescaledb.compress_orderby   = 'time DESC'
-);
+-- Columnstore is enabled by the segmentby/orderby settings in CREATE TABLE,
+-- which auto-creates a default 7-day policy. Replace it with a 24-hour policy:
+CALL remove_columnstore_policy('oee_timeseries');
+CALL add_columnstore_policy('oee_timeseries', after => INTERVAL '24 hours');
 
-SELECT add_compression_policy('oee_timeseries', INTERVAL '24 hours', if_not_exists => true);
+-- Compress existing chunks now to see immediate storage savings:
+SELECT compress_chunk(c, true) FROM show_chunks('oee_timeseries') c;
 ```
 
 ## Continuous Aggregates

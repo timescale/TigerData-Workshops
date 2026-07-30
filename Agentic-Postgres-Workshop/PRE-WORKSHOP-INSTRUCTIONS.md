@@ -4,18 +4,20 @@
 
 This workshop uses AI coding assistants to work with TigerData (TimescaleDB cloud service). You'll need to install and configure several tools before the workshop begins.
 
+> **Platform note:** These instructions have been tested on **macOS only.** The Windows and Linux commands (installers and package steps) are taken from official documentation but have not been verified — if you hit issues on those platforms, consult the linked docs (e.g. [antigravity.google](https://antigravity.google)).
+
 ## Table of Contents
 
 1. [Overview](#overview)
 2. [Prerequisites](#prerequisites)
 3. [Step 1: Access Your Command Line](#step-1-access-your-command-line)
-4. [Step 2: Install Gemini CLI](#step-2-install-gemini-cli)
-5. [Step 3: Authenticate Gemini CLI](#step-3-authenticate-gemini-cli)
-6. [Step 4: Test Gemini CLI](#step-4-test-gemini-cli)
+4. [Step 2: Install Antigravity CLI](#step-2-install-antigravity-cli)
+5. [Step 3: Authenticate Antigravity CLI](#step-3-authenticate-antigravity-cli)
+6. [Step 4: Test Antigravity CLI](#step-4-test-antigravity-cli)
 7. [Step 5: Install Tiger CLI](#step-5-install-tiger-cli)
 8. [Step 6: Install psql (PostgreSQL Client)](#step-6-install-psql-postgresql-client)
 9. [Step 7: Authenticate Tiger CLI](#step-7-authenticate-tiger-cli)
-10. [Step 8: Connect Tiger MCP to Gemini CLI](#step-8-connect-tiger-mcp-to-gemini-cli)
+10. [Step 8: Connect Tiger MCP to Antigravity CLI](#step-8-connect-tiger-mcp-to-antigravity-cli)
 11. [Step 9: Test the Integration](#step-9-test-the-integration)
 12. [Step 10: Download Workshop Materials](#step-10-download-workshop-materials)
 13. [Troubleshooting](#troubleshooting)
@@ -26,13 +28,13 @@ This workshop uses AI coding assistants to work with TigerData (TimescaleDB clou
 ## Overview
 
 **What you'll install:**
-- **Gemini CLI** - A free AI coding assistant from Google
+- **Antigravity CLI** - An AI coding assistant from Google
 - **Tiger CLI** - A command-line tool for managing TigerData databases
 - **psql** - PostgreSQL command-line client for direct database access
 - **Git** (or curl/wget) - For downloading workshop materials
 
 **What you'll need:**
-- A Google account (for Gemini CLI - free tier is sufficient)
+- A Google account (for Antigravity CLI)
 - A TigerData account (sign up at [console.tigerdata.com](https://console.tigerdata.com) - free tier available)
 - Internet connection
 - About 15-20 minutes
@@ -45,9 +47,9 @@ This workshop uses AI coding assistants to work with TigerData (TimescaleDB clou
 
 Before you begin, create these FREE accounts:
 
-1. **Google Account** (for Gemini CLI)
+1. **Google Account** (for Antigravity CLI)
    - If you don't have one, create it at [accounts.google.com](https://accounts.google.com)
-   - The free tier is sufficient for this workshop
+   - See [antigravity.google](https://antigravity.google) for Antigravity CLI details
 
 2. **TigerData Account** (for database services)
    - Sign up at [console.tigerdata.com](https://console.tigerdata.com)
@@ -87,47 +89,41 @@ You'll need to use your computer's command line interface (terminal) for this se
 
 ---
 
-## Step 2: Install Gemini CLI
+## Step 2: Install Antigravity CLI
 
-Gemini CLI is a free AI coding assistant from Google. It provides the AI capabilities we'll use to interact with databases during the workshop.
+Antigravity CLI is an AI coding assistant from Google, invoked with the `agy` command. It's a single native binary — **no Node.js, npm, or other package manager required** — that verifies its own checksum and auto-updates.
 
 ### Installation Instructions
 
 **For macOS and Linux:**
 
-Install globally with npm
-
 ```bash
-npm install -g @google/gemini-cli
+curl -fsSL https://antigravity.google/cli/install.sh | bash
 ```
-
-Install globally with Homebrew (macOS)
-
-If brew is not installed - follow the ionstructions at https://brew.sh/
-
-```bash
-brew install gemini-cli
-```
-
-**Expected output:** You should see messages about downloading and installing Gemini CLI.
 
 **For Windows (PowerShell):**
 
-Run this command:
-
 ```powershell
-iwr https://geminicli.com/install.ps1 -useb | iex
+irm https://antigravity.google/cli/install.ps1 | iex
 ```
+
+**For Windows (Command Prompt):**
+
+```cmd
+curl -fsSL https://antigravity.google/cli/install.cmd -o install.cmd && install.cmd && del install.cmd
+```
+
+**Expected output:** The installer downloads the `agy` binary, verifies its checksum, and prints a line to add to your shell profile if its install directory isn't already on your `PATH`.
 
 ### Verify Installation
 
-After installation completes, verify it worked by running:
+After installation completes, open a new terminal and verify it worked:
 
 ```bash
-gemini --version
+agy --version
 ```
 
-**Expected output:** You should see a version number like `gemini version 1.x.x`
+**Expected output:** You should see a version number like `agy version 1.x.x`
 
 **If you get "command not found":**
 - Close and reopen your terminal
@@ -136,46 +132,46 @@ gemini --version
 
 ---
 
-## Step 3: Authenticate Gemini CLI
+## Step 3: Authenticate Antigravity CLI
 
-Now you need to connect Gemini CLI to your Google account.
+Antigravity CLI has **no separate login command** — it authenticates automatically the first time you launch it and caches your credentials in your operating system's keyring (Keychain on macOS), so you won't need to repeat this.
 
 ### Authentication Steps
 
-1. Run this command:
+1. Launch Antigravity CLI for the first time:
 
 ```bash
-gemini auth login
+agy
 ```
 
 2. **Expected behavior:**
-   - Your web browser will automatically open
-   - You'll be asked to sign in with your Google account
-   - You'll see a permission request to allow Gemini CLI access
-   - Click "Allow" or "Authorize"
+   - Because no saved session exists yet, `agy` opens your default web browser
+   - Sign in with your Google account if prompted
+   - The browser shows a **Google Antigravity** page that reads "Paste this code into your application to complete authentication" with an authentication code
+   - Click **Copy to Clipboard** to copy the code
+   - Return to your terminal and paste the code into the `agy` console to complete authentication
 
-3. **After authorizing:**
-   - Return to your terminal
-   - You should see a success message like "Authentication successful"
+3. **After pasting the code:**
+   - You'll see a confirmation that you're signed in, and `agy` drops you into its interactive session
+   - Type `exit` (or press `Ctrl + C`) to leave for now — you'll use it again in the next step
 
 **If the browser doesn't open automatically:**
 - The terminal will display a URL
-- Copy the URL and paste it into your web browser manually
-- Complete the authorization process
-- Return to your terminal
+- Copy the URL and open it in your web browser manually
+- Complete the flow, click **Copy to Clipboard**, then paste the code into the `agy` console
 
 ---
 
-## Step 4: Test Gemini CLI
+## Step 4: Test Antigravity CLI
 
-Let's verify that Gemini CLI is working correctly.
+Let's verify that Antigravity CLI is working correctly.
 
 ### Test with a Simple Prompt
 
-Run this command to start an interactive Gemini session:
+Run this command to start an interactive Antigravity session:
 
 ```bash
-gemini
+agy
 ```
 
 **Expected behavior:**
@@ -189,10 +185,10 @@ Hello, please tell me what you can do
 ```
 
 **Expected response:**
-- Gemini should respond with information about its capabilities
+- Antigravity should respond with information about its capabilities
 - You should see a response within a few seconds
 
-**To exit Gemini CLI:**
+**To exit Antigravity CLI:**
 - Type `exit` or `quit`
 - Or press `Ctrl + C` (on macOS/Linux) or `Ctrl + D` (on Windows)
 
@@ -245,7 +241,7 @@ tiger version
 
 ## Step 6: Install psql (PostgreSQL Client)
 
-The `psql` command-line tool is the standard PostgreSQL interactive terminal. While not strictly required for the workshop (since we'll use Gemini CLI to interact with the database), having psql installed is useful for direct database queries and troubleshooting.
+The `psql` command-line tool is the standard PostgreSQL interactive terminal. It **is required** for this workshop: during the first exercise your AI assistant runs `generate_sensor_data.sql` through `psql` to create the sample-data CSV files (the generator uses psql's `\copy` command, which writes the files to your local machine). It's also handy for direct database queries and troubleshooting.
 
 ### Installation Instructions
 
@@ -364,9 +360,9 @@ tiger service list
 
 ---
 
-## Step 8: Connect Tiger MCP to Gemini CLI
+## Step 8: Connect Tiger MCP to Antigravity CLI
 
-Now we'll connect the Tiger MCP server to Gemini CLI, allowing the AI assistant to interact with TigerData.
+Now we'll connect the Tiger MCP server to Antigravity CLI, allowing the AI assistant to interact with TigerData.
 
 ### Install Tiger MCP Integration
 
@@ -377,29 +373,29 @@ tiger mcp install
 ```
 
 **Expected behavior:**
-- The installer will detect Gemini CLI
+- The installer will detect Antigravity CLI
 - It will automatically configure the integration
 - You'll see confirmation messages about the installation
 
 **You should see:**
-- "Detected Gemini CLI"
+- "Detected Antigravity CLI"
 - "Installing Tiger MCP server..."
 - "Installation successful" or similar
 
-**Note:** If you have multiple AI assistants installed (like Cursor or VS Code), the installer may ask which one to configure. Select Gemini CLI from the list.
+**Note:** If you have multiple AI assistants installed (like Cursor or VS Code), the installer may ask which one to configure. Select Antigravity CLI from the list.
 
 ---
 
 ## Step 9: Test the Integration
 
-Now let's verify that Gemini CLI can communicate with TigerData through the Tiger MCP server.
+Now let's verify that Antigravity CLI can communicate with TigerData through the Tiger MCP server.
 
 ### Test the Integration
 
-1. Start Gemini CLI:
+1. Start Antigravity CLI:
 
 ```bash
-gemini
+agy
 ```
 
 2. Once you see the `You:` prompt, type this EXACT prompt:
@@ -409,7 +405,7 @@ what tools do you have access to?
 ```
 
 **Expected response:**
-- Gemini should list various tools including Tiger-related functions
+- Antigravity should list various tools including Tiger-related functions
 - Look for tools like:
   - `tiger__service_list`
   - `tiger__service_create`
@@ -417,20 +413,20 @@ what tools do you have access to?
   - `tiger__search_docs`
   - And others with `tiger__` prefix
 
-3. Now test the connection by asking Gemini to list your services:
+3. Now test the connection by asking Antigravity to list your services:
 
 ```
 list my tigerdata services
 ```
 
 **Expected response:**
-- Gemini will use the Tiger MCP tools to query your account
+- Antigravity will use the Tiger MCP tools to query your account
 - You'll see either:
   - "You have no services" (if you haven't created any yet - this is fine!)
   - Or a list of your existing services
 - This confirms the integration is working!
 
-4. Exit Gemini CLI:
+4. Exit Antigravity CLI:
    - Type `exit` or press `Ctrl + C`
 
 **If you see the Tiger tools and can successfully list services, you're all set!**
@@ -439,100 +435,40 @@ list my tigerdata services
 
 ## Step 10: Download Workshop Materials
 
-The workshop uses sample CSV files with time-series sensor data. You need to download these files to your computer.
+Clone the repository — the workshop runs directly from the cloned files. **You don't need to generate any data now:** during the first exercise your AI assistant creates the Tiger service and generates the sample-data CSVs for you.
 
-### Option A: Clone the Repository (Recommended if you have Git)
-
-**Check if you have Git installed:**
+**Check that Git is installed:**
 
 ```bash
 git --version
 ```
 
-If you see a version number, you have Git. If not, see "Option B" below.
+If you don't see a version number, install Git from <https://git-scm.com/downloads> (or use your OS package manager), then continue.
 
-**Clone the repository:**
+**Clone the repository and enter the workshop folder:**
 
 ```bash
 git clone https://github.com/timescale/TigerData-Workshops.git
-```
-
-**Navigate to the workshop directory:**
-
-```bash
 cd TigerData-Workshops/Agentic-Postgres-Workshop
 ```
 
-**Verify the files are there:**
+### Verify Your Files
 
+Check that the workshop files are present:
+
+**macOS/Linux:**
 ```bash
 ls
 ```
 
-You should see files including `data.csv` and `sensors.csv`.
-
-### Option B: Download Files Manually (If you don't have Git)
-
-**For macOS and Linux (using curl):**
-
-Create a directory for the workshop:
-
-```bash
-mkdir -p ~/agentic-postgres-workshop
-cd ~/agentic-postgres-workshop
-```
-
-Download the CSV files:
-
-```bash
-curl -O https://raw.githubusercontent.com/timescale/TigerData-Workshops/main/Agentic-Postgres-Workshop/data.csv
-
-curl -O https://raw.githubusercontent.com/timescale/TigerData-Workshops/main/Agentic-Postgres-Workshop/sensors.csv
-```
-
-**For Windows (using PowerShell):**
-
-Create a directory:
-
-```powershell
-mkdir $HOME\agentic-postgres-workshop
-cd $HOME\agentic-postgres-workshop
-```
-
-Download the CSV files:
-
-```powershell
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/timescale/TigerData-Workshops/main/Agentic-Postgres-Workshop/data.csv" -OutFile "data.csv"
-
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/timescale/TigerData-Workshops/main/Agentic-Postgres-Workshop/sensors.csv" -OutFile "sensors.csv"
-```
-
-### Option C: Download via Web Browser
-
-1. Visit: [https://github.com/timescale/TigerData-Workshops/tree/main/Agentic-Postgres-Workshop](https://github.com/timescale/TigerData-Workshops/tree/main/Agentic-Postgres-Workshop)
-2. Click on `data.csv`, then click "Download" or "Raw" button
-3. Save the file to a folder on your computer (e.g., `Documents/agentic-postgres-workshop`)
-4. Repeat for `sensors.csv`
-5. Remember the folder location - you'll need it during the workshop!
-
-### Verify Your Files
-
-Check that you have both files:
-
-**macOS/Linux:**
-```bash
-ls -lh *.csv
-```
-
 **Windows:**
 ```powershell
-dir *.csv
+dir
 ```
 
 **Expected output:**
-- You should see two files: `data.csv` and `sensors.csv`
-- `data.csv` should be several MB in size
-- `sensors.csv` should be much smaller (a few KB)
+- You should see `README.md`, `PRE-WORKSHOP-INSTRUCTIONS.md`, and `generate_sensor_data.sql`
+- `data.csv` and `sensors.csv` are **not** here yet — they're generated during the workshop (see the workshop [README](README.md), step 1)
 
 ---
 
@@ -550,14 +486,14 @@ dir *.csv
 - On macOS/Linux: Run `source ~/.bashrc` or `source ~/.zshrc`
 - On Windows: Restart PowerShell
 
-### Problem: Gemini CLI browser authentication not working
+### Problem: Antigravity CLI browser authentication not working
 
 **Solution:**
 1. Look for a URL in the terminal output
 2. Copy the entire URL
 3. Paste it manually into your web browser
-4. Complete the authorization
-5. You may see a code - copy it and paste it back into your terminal
+4. On the Google Antigravity page, click **Copy to Clipboard** to copy the authentication code
+5. Paste the code back into the `agy` console in your terminal
 
 ### Problem: Tiger CLI authentication fails
 
@@ -567,27 +503,30 @@ dir *.csv
 3. If the browser doesn't open, look for a URL in the terminal and open it manually
 4. Clear your browser cache and try again
 
-### Problem: Gemini CLI doesn't show Tiger tools
+### Problem: Antigravity CLI doesn't show Tiger tools
 
 **Solution:**
 1. Make sure Tiger CLI is installed: `tiger version`
 2. Reinstall the MCP integration: `tiger mcp install`
-3. Completely quit and restart Gemini CLI
+3. Completely quit and restart Antigravity CLI
 4. Try asking "what tools do you have access to?" again
 
-### Problem: Cannot download CSV files
+### Problem: data generation fails during the workshop (`generate_sensor_data.sql`)
+
+Data generation happens in the workshop's first exercise — your AI assistant creates the service and runs `psql "<connection-string>" -f generate_sensor_data.sql`. If it fails or produces no files:
 
 **Solution:**
-- Check your internet connection
-- Try the alternative download method (web browser)
-- Visit the GitHub repository directly and download files manually
-- Make sure you're using the correct URLs
+- Make sure the command runs from the `TigerData-Workshops/Agentic-Postgres-Workshop` folder — the `\copy` commands write `data.csv` and `sensors.csv` to that current directory
+- Verify `psql` is installed (`psql --version`) — see [Step 6](#step-6-install-psql-postgresql-client)
+- Check the service connection string works: `psql "<connection-string>" -c "SELECT 1"`
+- It must be run with `psql`, not the Tiger MCP query tool — `\copy` is a psql client command that MCP can't execute
+- The generator uses only core PostgreSQL functions (no extensions), so it runs on any Tiger/Postgres service
+- It's safe to re-run; it overwrites the two CSV files
 
-### Problem: Git not installed (when trying Option A)
+### Problem: Git not installed
 
 **Solution:**
-- Use Option B (curl/PowerShell) or Option C (web browser) instead
-- Or install Git:
+- Install Git, then re-run the clone step:
   - macOS: Run `xcode-select --install`
   - Windows: Download from [git-scm.com](https://git-scm.com)
   - Linux: Run `sudo apt install git` (Ubuntu/Debian) or `sudo yum install git` (RedHat/CentOS)
@@ -602,7 +541,7 @@ If you encounter issues during setup:
 2. **Check your terminal output** - error messages often contain helpful information
 3. **Verify each step** - go back through the instructions to make sure you didn't skip anything
 4. **Documentation resources:**
-   - Gemini CLI: [geminicli.com](https://geminicli.com)
+   - Antigravity CLI: [antigravity.google](https://antigravity.google)
    - Tiger CLI: [github.com/timescale/tiger-cli](https://github.com/timescale/tiger-cli)
    - TigerData: [console.tigerdata.com](https://console.tigerdata.com)
 
@@ -615,14 +554,13 @@ If you encounter issues during setup:
 Before attending the workshop, verify you can do the following:
 
 - [ ] Open a terminal on your computer
-- [ ] Run `gemini --version` and see a version number
+- [ ] Run `agy --version` and see a version number
 - [ ] Run `tiger version` and see a version number
 - [ ] Run `psql --version` and see a version number
-- [ ] Run `gemini` and interact with the AI assistant
-- [ ] Ask Gemini "what tools do you have access to?" and see Tiger tools listed
-- [ ] Ask Gemini "list my tigerdata services" and get a response (even if empty)
-- [ ] Have `data.csv` and `sensors.csv` files downloaded and accessible
-- [ ] Know the location of your workshop files folder
+- [ ] Run `agy` and interact with the AI assistant
+- [ ] Ask Antigravity "what tools do you have access to?" and see Tiger tools listed
+- [ ] Ask Antigravity "list my tigerdata services" and get a response (even if empty)
+- [ ] Cloned the workshop repo and know the location of the `Agentic-Postgres-Workshop` folder (the `data.csv`/`sensors.csv` files are generated during the workshop, not now)
 
 **If you can check all these boxes, you're ready for the workshop!**
 

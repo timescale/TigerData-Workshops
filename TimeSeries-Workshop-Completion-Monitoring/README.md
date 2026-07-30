@@ -179,6 +179,8 @@ Volume reference:
 Compress completed stage telemetry automatically after the active pumping buffer:
 
 ```sql
+-- A default 7-day columnstore policy is auto-created at table creation; remove it first:
+CALL remove_columnstore_policy('frac_telemetry');
 CALL add_columnstore_policy('frac_telemetry', after => INTERVAL '12 hours');
 ```
 
@@ -226,7 +228,7 @@ GROUP BY ps.substage_number, ...;
 
 ```bash
 psql "postgres://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=require" \
-  -f Hands-on-workshop-well-completion-monitoring-psql.sql
+  -f Hands-on-workshop-completion-monitoring-psql.sql
 ```
 
 Or connect interactively and run sections one at a time:
