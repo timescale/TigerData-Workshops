@@ -29,7 +29,7 @@ This workshop demonstrates how to work with TigerData using Tiger MCP tools and 
 
 ### Install Tiger CLI
 
-Tiger CLI is an open-source command-line tool and MCP (Model Context Protocol) server for managing and querying database services. It provides AI assistance tools like Claude Code with access to PostgreSQL and TigerData/TimescaleDB best practices.
+Tiger CLI is an open-source command-line tool and MCP (Model Context Protocol) server for managing and querying database services. It provides AI assistance tools like Gemini CLI with access to PostgreSQL and TigerData/TimescaleDB best practices.
 
 **Source code and documentation:** [https://github.com/timescale/tiger-cli](https://github.com/timescale/tiger-cli)
 
@@ -59,10 +59,10 @@ This will open a browser window to complete the authentication process.
 
 Tiger CLI supports integration with various AI coding assistant tools:
 
-- **Claude Code** (recommended for this workshop)
+- **Gemini CLI** (recommended for this workshop — it has a free tier sufficient to complete it)
+- Claude Code
 - Codeium
 - Cursor
-- Gemini CLI
 - Google Antigravity
 - Kiro CLI
 - VS Code with Copilot
