@@ -4,6 +4,8 @@
 
 This workshop uses AI coding assistants to work with TigerData (TimescaleDB cloud service). You'll need to install and configure several tools before the workshop begins.
 
+> **Platform note:** These instructions have been tested on **macOS only.** The Windows and Linux commands (installers and package steps) are taken from official documentation but have not been verified — if you hit issues on those platforms, consult the linked docs (e.g. [antigravity.google](https://antigravity.google)).
+
 ## Table of Contents
 
 1. [Overview](#overview)
