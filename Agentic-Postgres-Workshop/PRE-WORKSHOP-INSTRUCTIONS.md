@@ -245,7 +245,7 @@ tiger version
 
 ## Step 6: Install psql (PostgreSQL Client)
 
-The `psql` command-line tool is the standard PostgreSQL interactive terminal. While not strictly required for the workshop (since we'll use Gemini CLI to interact with the database), having psql installed is useful for direct database queries and troubleshooting.
+The `psql` command-line tool is the standard PostgreSQL interactive terminal. It **is required** for this workshop: during the first exercise your AI assistant runs `generate_sensor_data.sql` through `psql` to create the sample-data CSV files (the generator uses psql's `\copy` command, which writes the files to your local machine). It's also handy for direct database queries and troubleshooting.
 
 ### Installation Instructions
 
@@ -439,7 +439,7 @@ list my tigerdata services
 
 ## Step 10: Download Workshop Materials
 
-Clone the repository and generate the sample data — the workshop runs directly from the cloned files.
+Clone the repository — the workshop runs directly from the cloned files. **You don't need to generate any data now:** during the first exercise your AI assistant creates the Tiger service and generates the sample-data CSVs for you.
 
 **Check that Git is installed:**
 
@@ -456,32 +456,23 @@ git clone https://github.com/timescale/TigerData-Workshops.git
 cd TigerData-Workshops/Agentic-Postgres-Workshop
 ```
 
-**Generate the sample data files.** `data.csv` and `sensors.csv` are created locally by the script (they are not committed to the repo), using only the Python standard library:
-
-```bash
-python generate_sensor_data.py
-```
-
-This creates `data.csv` and `sensors.csv` in the current directory.
-
 ### Verify Your Files
 
-Check that you have both files:
+Check that the workshop files are present:
 
 **macOS/Linux:**
 ```bash
-ls -lh *.csv
+ls
 ```
 
 **Windows:**
 ```powershell
-dir *.csv
+dir
 ```
 
 **Expected output:**
-- You should see two files: `data.csv` and `sensors.csv`
-- `data.csv` should be several MB in size
-- `sensors.csv` should be much smaller (a few KB)
+- You should see `README.md`, `PRE-WORKSHOP-INSTRUCTIONS.md`, and `generate_sensor_data.sql`
+- `data.csv` and `sensors.csv` are **not** here yet — they're generated during the workshop (see the workshop [README](README.md), step 1)
 
 ---
 
@@ -524,13 +515,17 @@ dir *.csv
 3. Completely quit and restart Gemini CLI
 4. Try asking "what tools do you have access to?" again
 
-### Problem: `python generate_sensor_data.py` fails or produces no files
+### Problem: data generation fails during the workshop (`generate_sensor_data.sql`)
+
+Data generation happens in the workshop's first exercise — your AI assistant creates the service and runs `psql "<connection-string>" -f generate_sensor_data.sql`. If it fails or produces no files:
 
 **Solution:**
-- Make sure you're in the `TigerData-Workshops/Agentic-Postgres-Workshop` folder — the script writes `data.csv` and `sensors.csv` to the current directory
-- If `python` is not found, try `python3`
-- The script uses only the Python standard library, so no `pip install` is needed
-- Re-run it any time; it overwrites the two CSV files
+- Make sure the command runs from the `TigerData-Workshops/Agentic-Postgres-Workshop` folder — the `\copy` commands write `data.csv` and `sensors.csv` to that current directory
+- Verify `psql` is installed (`psql --version`) — see [Step 6](#step-6-install-psql-postgresql-client)
+- Check the service connection string works: `psql "<connection-string>" -c "SELECT 1"`
+- It must be run with `psql`, not the Tiger MCP query tool — `\copy` is a psql client command that MCP can't execute
+- The generator uses only core PostgreSQL functions (no extensions), so it runs on any Tiger/Postgres service
+- It's safe to re-run; it overwrites the two CSV files
 
 ### Problem: Git not installed
 
@@ -569,8 +564,7 @@ Before attending the workshop, verify you can do the following:
 - [ ] Run `gemini` and interact with the AI assistant
 - [ ] Ask Gemini "what tools do you have access to?" and see Tiger tools listed
 - [ ] Ask Gemini "list my tigerdata services" and get a response (even if empty)
-- [ ] Have generated `data.csv` and `sensors.csv` (`python generate_sensor_data.py`) and know their location
-- [ ] Know the location of your workshop files folder
+- [ ] Cloned the workshop repo and know the location of the `Agentic-Postgres-Workshop` folder (the `data.csv`/`sensors.csv` files are generated during the workshop, not now)
 
 **If you can check all these boxes, you're ready for the workshop!**
 
