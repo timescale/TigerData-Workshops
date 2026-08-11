@@ -14,7 +14,12 @@
 -- Definitions are lifted verbatim from 08_continuous_aggregates.sql. If you would
 -- rather guarantee consistency with that file in full, re-run step 08 instead —
 -- it is idempotent, but it drops and refills all eight aggregates.
-CREATE MATERIALIZED VIEW cagg_plant_power_daily
+--
+-- IF NOT EXISTS is honoured for continuous aggregates (it prints
+-- `continuous aggregate "..." already exists, skipping`), so this whole file is safe
+-- to re-run: on a database that already has both, every statement below either skips
+-- or reports itself already up to date.
+CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_plant_power_daily
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT time_bucket('1 day', bucket)   AS day,
        plant_id,
@@ -33,7 +38,7 @@ SELECT time_bucket('1 day', bucket)   AS day,
  GROUP BY time_bucket('1 day', bucket), plant_id, region_name
 WITH NO DATA;
 
-CREATE MATERIALIZED VIEW cagg_regional_power_daily
+CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_regional_power_daily
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT time_bucket('1 day', bucket)   AS day,
        region_name,
@@ -65,31 +70,23 @@ ALTER MATERIALIZED VIEW cagg_regional_power_daily
 -- ============================================================================
 -- Fill them, then hand them to policies
 -- ============================================================================
--- refresh_continuous_aggregate cannot run inside a transaction block, and a
--- full-history NULL,NULL refresh is what gets OOM-killed on a large database. So
--- window it, exactly as step 08 does. \gexec runs each generated statement at
--- psql's top level, which is the only context that call supports.
+-- refresh_continuous_aggregate cannot run inside a transaction block, so these are
+-- top-level statements rather than a loop in a DO block.
 --
--- These two roll up from already-materialised hourly parents, so this is fast:
--- a few thousand output rows from a few million pre-aggregated ones.
+-- No manual windowing: since TimescaleDB 2.28.0 the call batches incrementally by
+-- itself — `buckets_per_batch` defaults to 10 buckets, so 10 days for these daily
+-- aggregates, and each batch commits separately. That is what used to require
+-- refreshing a month at a time to avoid an OOM kill on a full-history refresh.
+--
+-- These two roll up from already-materialised hourly parents, so this is fast either
+-- way: a few thousand output rows from a few million pre-aggregated ones.
 
-SET maintenance_work_mem            = '256MB';
-SET max_parallel_workers_per_gather = 2;
+SELECT (date_trunc('hour', now()) - make_interval(days => cfg_int('backfill_days')))::text AS fill_from,
+       date_trunc('hour', now())::text AS fill_to
+\gset
 
-SELECT format('CALL refresh_continuous_aggregate(%L, %L::timestamptz, %L::timestamptz);',
-              c.view_name, g.lo, g.lo + INTERVAL '1 month')
-  FROM (SELECT * FROM unnest(ARRAY['cagg_plant_power_daily',
-                                   'cagg_regional_power_daily'])
-                 WITH ORDINALITY AS c(view_name, seq)) c
-  CROSS JOIN generate_series(
-         date_trunc('month', now() - make_interval(days => cfg_int('backfill_days'))),
-         date_trunc('month', now()),
-         INTERVAL '1 month') AS g(lo)
- ORDER BY c.seq, g.lo
-\gexec
-
-RESET maintenance_work_mem;
-RESET max_parallel_workers_per_gather;
+CALL refresh_continuous_aggregate('cagg_plant_power_daily',    :'fill_from', :'fill_to');
+CALL refresh_continuous_aggregate('cagg_regional_power_daily', :'fill_from', :'fill_to');
 
 SELECT add_continuous_aggregate_policy('cagg_plant_power_daily',
   start_offset => INTERVAL '10 days', end_offset => INTERVAL '1 day',

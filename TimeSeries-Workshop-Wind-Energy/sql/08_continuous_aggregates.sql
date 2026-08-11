@@ -647,10 +647,34 @@ SELECT region_name,
 -- 24th of 25 calls for the first aggregate. That needed a `\c` reconnect between
 -- aggregates to release what the previous backend had accumulated.
 --
--- SINCE 2.28.0 NONE OF THAT SCAFFOLDING IS NEEDED. refresh_continuous_aggregate()
--- refreshes incrementally by default — `buckets_per_batch` is 10 — and each batch
--- runs in its OWN transaction, so locks are released and memory is reclaimed as it
--- goes. That is the same bound the manual windowing was buying, done by the engine.
+-- SINCE 2.28.0 NONE OF THAT SCAFFOLDING IS NEEDED, because the engine now does the
+-- windowing itself. One `CALL refresh_continuous_aggregate(...)` no longer means one
+-- giant operation: it is INCREMENTAL by default, and three defaults describe it.
+--
+--   buckets_per_batch        10      batch size, in BUCKETS — not chunks, not rows.
+--                                    The batch's time range is bucket width x this,
+--                                    so 10 hours for an hourly aggregate and 10 days
+--                                    for a daily one. Each batch is a separate
+--                                    refresh over its own slice of the range.
+--   refresh_newest_first     true    batches run from the newest slice backwards, so
+--                                    dashboards light up with recent data first.
+--   max_batches_per_execution 0      no cap; keep going until the range is done.
+--
+-- The batches are SEQUENTIAL, not parallel — one call is still one backend doing one
+-- thing at a time. What each batch gets is its OWN TRANSACTION, and that is the whole
+-- benefit: locks are released between batches, memory is reclaimed between batches,
+-- and each batch's rows become visible as it commits. That is exactly the bound the
+-- hand-written monthly windowing above was buying, minus the hand-writing.
+--
+-- You can watch it happen. Count committed transactions across one refresh:
+--
+--   SELECT xact_commit FROM pg_stat_database WHERE datname = current_database();
+--   CALL refresh_continuous_aggregate('cagg_wind_hourly', NULL, NULL);
+--   SELECT xact_commit FROM pg_stat_database WHERE datname = current_database();
+--
+-- The counter moves by hundreds. Now set `options => '{"buckets_per_batch": 0}'` and
+-- it moves by one — that is the pre-2.28 single-transaction behaviour, and it is how
+-- you would reproduce the OOM above on purpose.
 --
 -- Measured on this workshop at the volume that used to die (12 plants x 8 turbines
 -- x 730 days = 6.73M rows per hypertable, 8 GiB / 4 CPU), all eight aggregates
@@ -660,20 +684,36 @@ SELECT region_name,
 --   one call per aggregate, fresh connection     30 s   2.24 GiB peak
 --   one call per aggregate, ONE session          33 s   2.27 GiB peak
 --
--- Same memory to within noise, no OOM in any variant, and the simple version is
--- the fastest. Set `options => '{"buckets_per_batch": 0}'` to get the old
--- single-transaction behaviour back, which is how you would reproduce the failure.
+-- Same memory to within noise, no OOM in any variant, and the simple version is the
+-- fastest. So the file just calls each aggregate once, below.
 --
--- WHY \gexec RATHER THAN A LOOP: refresh_continuous_aggregate manages its own
--- transactions, so it cannot run inside a plpgsql DO block or a procedure —
--- attempting it raises "cannot run inside a transaction block", and forcing the
--- issue with nested procedure calls crashed the backend outright while this file
--- was being written. \gexec runs each generated statement at psql's top level,
--- which is the one context that call actually supports. Plain psql, no tooling.
+-- A GUC WORTH KNOWING ABOUT, AND WHY IT DOES NOTHING HERE. The docs offer
+-- `timescaledb.enable_merge_on_cagg_refresh` (2.17+, PG15+, off by default), which
+-- makes a refresh MERGE into the materialization instead of deleting the old rows and
+-- re-inserting. Measured on a 115k-row source, refreshing a range that was already
+-- materialised: 8462 kB of WAL with it off, 454 kB with it on — 18x less. Real, and
+-- irrelevant to this file twice over:
 --
--- Careful with `psql -c` too: `psql -c "SET ...; CALL refresh..."` puts both
--- statements in a single implicit transaction and every refresh fails. Use
--- PGOPTIONS for the setting, or a separate invocation.
+--   * It only applies to aggregates WITHOUT columnstore enabled, and step 09 enables
+--     columnstore on all eight. Measured on a columnstore-enabled aggregate: 8447 kB
+--     off vs 8511 kB on. No effect, no warning, no error — it is silently ignored.
+--     The gate is `compression_enabled` on the AGGREGATE, not whether the chunk being
+--     written is actually compressed yet.
+--   * Even before step 09 runs, the fill below is COLD — nothing is materialised, so
+--     there is nothing to delete-and-reinsert and nothing for MERGE to improve on.
+--     Measured cold: 7227 kB either way.
+--
+-- Where it would pay is a repeatedly-refreshed rowstore-only aggregate over a wide
+-- `start_offset`. That is a real shape; it just is not this one.
+--
+-- Careful with `psql -c`: `psql -c "SET ...; CALL refresh..."` puts both statements in
+-- a single implicit transaction, and refresh_continuous_aggregate cannot run inside
+-- one — every refresh fails. Use PGOPTIONS for the setting, or a separate invocation.
+-- Same reason these are eight top-level statements rather than a loop: the call
+-- manages its own transactions, so it cannot live in a DO block or a procedure.
+-- Attempting it raises "cannot run inside a transaction block", and forcing the issue
+-- with nested procedure calls crashed the backend outright while this file was
+-- being written.
 --
 -- ORDER MATTERS, and it is a correctness constraint rather than a tuning choice.
 -- These aggregates form a chain:
@@ -682,107 +722,45 @@ SELECT region_name,
 --                                       \-> turbine_daily  \-> plant_daily
 --   wind_measurements -> wind_hourly    -> wind_daily
 --
--- A hierarchical aggregate reads its parent, so refreshing a child first
--- materialises a rollup of data that is not there yet — and it does so SILENTLY,
--- leaving an empty child rather than raising. The ORDER BY below is that order.
--- Do not sort these names alphabetically: cagg_plant_power_daily sorts before
--- cagg_plant_power_hourly, which is exactly backwards.
-
-\echo '--- filling eight aggregates, one call each ---'
-
-SELECT format('CALL refresh_continuous_aggregate(%L, %L::timestamptz, %L::timestamptz);',
-              d.cagg,
-              date_trunc('hour', now()) - make_interval(days => cfg_int('backfill_days')),
-              date_trunc('hour', now()))
-  FROM (VALUES
-          (1, 'cagg_turbine_power_hourly'),   -- reads power_generation
-          (2, 'cagg_wind_hourly'),            -- reads wind_measurements
-          (3, 'cagg_turbine_power_daily'),    -- reads turbine_hourly
-          (4, 'cagg_plant_power_hourly'),     -- reads turbine_hourly
-          (5, 'cagg_wind_daily'),             -- reads wind_hourly
-          (6, 'cagg_plant_power_daily'),      -- reads plant_hourly
-          (7, 'cagg_regional_power_hourly'),  -- reads plant_hourly
-          (8, 'cagg_regional_power_daily')    -- reads regional_hourly
-       ) AS d(seq, cagg)
- -- Emits nothing when reset_demo.sh is filling these in parallel instead.
- WHERE cfg('parallel_cagg_fill') <> 'true'
- ORDER BY d.seq
-\gexec
-
-
--- ============================================================================
--- ## cagg_fill_plan() — windows for a parallel initial fill
--- ============================================================================
--- Returns one row per (aggregate, window) in DEPENDENCY ORDER, windows aligned to
--- each aggregate's own MATERIALIZATION chunk interval. reset_demo.sh reads this and
--- refreshes one aggregate's windows concurrently before moving to the next.
+-- A hierarchical aggregate reads its parent, so refreshing a child first materialises
+-- a rollup of data that is not there yet — and it does so SILENTLY, leaving an empty
+-- child rather than raising. The order below is that order. Do not sort these names
+-- alphabetically: cagg_plant_power_daily sorts before cagg_plant_power_hourly, which
+-- is exactly backwards.
 --
--- Two things this encodes that a caller must not get wrong.
+-- THE UPPER BOUND IS A DELIBERATE CHOICE, not just tidiness. Refreshing to an instant
+-- INSIDE an open bucket materialises that whole bucket and moves the aggregate's
+-- watermark to the bucket's END — leaving the watermark ahead of the wall clock. Since
+-- real-time aggregation only unions raw rows ABOVE the watermark, every row that lands
+-- in that bucket afterwards becomes invisible: not materialised, and not unioned. Even
+-- `force => true` will not recover it, because a refresh's upper bound snaps DOWN to a
+-- bucket boundary and so never revisits the offending bucket. Step 12 hit exactly this.
 --
--- ORDER. These aggregates are a chain, not a flat set:
---   power_generation -> turbine_hourly -> plant_hourly -> regional_hourly -> regional_daily
---                                     \-> turbine_daily  \-> plant_daily
---   wind_measurements -> wind_hourly -> wind_daily
--- Refresh a child before its parent is materialised and the child comes out EMPTY,
--- silently. `seq` is the safe order; do not reorder it.
---
--- WINDOW SIZE. Aligned to the materialization hypertable's chunk_interval — 70 days
--- here, because TimescaleDB defaults it to 10x the bucket width — so concurrent
--- workers write into different materialization chunks instead of contending to
--- create one. That is the same lesson as the raw backfill: chunk creation takes
--- ShareUpdateExclusiveLock on the parent and holds it to commit.
---
--- Measured, 20 turbines x 730 days, 4 CPU, all eight aggregates force-refreshed:
---   fully serial                                          13590 ms
---   4 window workers per aggregate, aggregates in order     4805 ms   2.83x
---   aggregates within a dependency level run concurrently   9119 ms   1.49x
---   both combined                                           5664 ms   2.40x
--- Window-parallelism alone wins, and needs no dependency-level bookkeeping beyond
--- the ordering correctness already demands. Combining them oversubscribes 4 CPUs.
---
--- Concurrent refreshes of the SAME aggregate over DISJOINT windows are supported.
--- What fails is a manual refresh overlapping a refresh POLICY's window — which is
--- why the policies below are registered only after the fill, and left paused.
-CREATE OR REPLACE FUNCTION cagg_fill_plan()
-RETURNS TABLE (seq INTEGER, cagg TEXT, win_from TIMESTAMPTZ, win_to TIMESTAMPTZ)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_order TEXT[] := ARRAY[
-    'cagg_turbine_power_hourly',   -- reads power_generation
-    'cagg_wind_hourly',            -- reads wind_measurements
-    'cagg_turbine_power_daily',    -- reads turbine_hourly
-    'cagg_plant_power_hourly',     -- reads turbine_hourly
-    'cagg_wind_daily',             -- reads wind_hourly
-    'cagg_plant_power_daily',      -- reads plant_hourly
-    'cagg_regional_power_hourly',  -- reads plant_hourly
-    'cagg_regional_power_daily'];  -- reads regional_hourly
-  v_i INTEGER; v_ca TEXT; v_secs BIGINT;
-  v_from TIMESTAMPTZ; v_to TIMESTAMPTZ; v_edge TIMESTAMPTZ;
-BEGIN
-  v_to   := date_trunc('hour', now());
-  v_from := v_to - make_interval(days => cfg_int('backfill_days'));
+-- Ending on an hour boundary keeps the watermark BEHIND now(), so the current partial
+-- bucket stays unmaterialised and real-time aggregation serves it live — which is what
+-- you want during a workshop that keeps writing. \gset puts the window in two psql
+-- variables so each CALL below stays a plain, readable statement.
+SELECT (date_trunc('hour', now()) - make_interval(days => cfg_int('backfill_days')))::text AS fill_from,
+       date_trunc('hour', now())::text AS fill_to
+\gset
 
-  FOR v_i IN 1 .. array_length(v_order, 1) LOOP
-    v_ca := v_order[v_i];
-    SELECT EXTRACT(EPOCH FROM d.time_interval)::BIGINT INTO v_secs
-      FROM timescaledb_information.continuous_aggregates ca
-      JOIN timescaledb_information.dimensions d
-        ON d.hypertable_name = ca.materialization_hypertable_name
-     WHERE ca.view_name = v_ca;
-    CONTINUE WHEN v_secs IS NULL;          -- aggregate does not exist yet
+\echo '--- filling eight aggregates, one call each, parents before children ---'
 
-    v_edge := to_timestamp((FLOOR(EXTRACT(EPOCH FROM v_from) / v_secs) * v_secs)::DOUBLE PRECISION);
-    WHILE v_edge < v_to LOOP
-      seq := v_i; cagg := v_ca;
-      win_from := v_edge;
-      win_to   := LEAST(v_edge + make_interval(secs => v_secs), v_to);
-      RETURN NEXT;
-      v_edge := v_edge + make_interval(secs => v_secs);
-    END LOOP;
-  END LOOP;
-END;
-$$;
+-- Level 1 — read the raw hypertables.
+CALL refresh_continuous_aggregate('cagg_turbine_power_hourly',  :'fill_from', :'fill_to');
+CALL refresh_continuous_aggregate('cagg_wind_hourly',           :'fill_from', :'fill_to');
+
+-- Level 2 — read cagg_turbine_power_hourly / cagg_wind_hourly.
+CALL refresh_continuous_aggregate('cagg_turbine_power_daily',   :'fill_from', :'fill_to');
+CALL refresh_continuous_aggregate('cagg_plant_power_hourly',    :'fill_from', :'fill_to');
+CALL refresh_continuous_aggregate('cagg_wind_daily',            :'fill_from', :'fill_to');
+
+-- Level 3 — read cagg_plant_power_hourly.
+CALL refresh_continuous_aggregate('cagg_plant_power_daily',     :'fill_from', :'fill_to');
+CALL refresh_continuous_aggregate('cagg_regional_power_hourly', :'fill_from', :'fill_to');
+
+-- Level 4 — reads cagg_regional_power_hourly.
+CALL refresh_continuous_aggregate('cagg_regional_power_daily',  :'fill_from', :'fill_to');
 
 
 -- ============================================================================

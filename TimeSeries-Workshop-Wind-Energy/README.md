@@ -953,43 +953,37 @@ Ruled out by measurement, each of which seemed plausible first:
 - **Ordering the generated rows.** `ORDER BY time` inside a window: about 4%, at the
   edge of noise. Ordering to match `segmentby`/`orderby` added nothing.
 
-### The aggregate fill is parallel by WINDOW, not by aggregate
-
-The eight aggregates form a chain, not a flat set:
-
-```
-power_generation  -> turbine_hourly -> plant_hourly -> regional_hourly -> regional_daily
-                                    \-> turbine_daily  \-> plant_daily
-wind_measurements -> wind_hourly    -> wind_daily
-```
-
-Concurrent refreshes of the **same** aggregate over **disjoint** windows are
-supported, and that is the axis that pays:
-
-| strategy | time | speed-up |
-|---|---|---|
-| fully serial | 13590 ms | — |
-| **windows of one aggregate concurrently, aggregates in order** | **4805 ms** | **2.83x** |
-| aggregates within a dependency level concurrently | 9119 ms | 1.49x |
-| both combined | 5664 ms | 2.40x |
-
-Window-parallelism is both faster and simpler, and combining the two oversubscribes
-the CPUs. Two things must be right: the windows are aligned to each aggregate's
-**materialization** chunk interval (70 days here — TimescaleDB defaults it to 10x the
-bucket width, not the bucket width itself), and the aggregates are processed in
-dependency order. **Order is a correctness constraint, not a tuning choice**:
-refreshing a child before its parent is materialised leaves the child *empty*, and
-it does so silently. Do not sort these names alphabetically —
-`cagg_plant_power_daily` sorts before `cagg_plant_power_hourly`, which is backwards.
-
-### The fill needs no manual windowing any more
+### The aggregate fill is eight plain statements, because the engine batches now
 
 Step 08 used to refresh a month at a time with a `\c` reconnect between aggregates,
 because on older versions a single refresh over two years was one operation and got
 OOM-killed, and because memory then accumulated across calls in one session. Since
-TimescaleDB **2.28.0** `refresh_continuous_aggregate()` refreshes incrementally by
-default — `buckets_per_batch` is 10, and each batch runs in its own transaction — so
-the engine now provides the bound that scaffolding was buying.
+TimescaleDB **2.28.0** none of that is needed: `refresh_continuous_aggregate()`
+refreshes incrementally by itself. Three defaults describe it, and two are easy to
+misread:
+
+| option | default | what it means |
+|---|---|---|
+| `buckets_per_batch` | `10` | Batch size in **buckets** — not chunks, not rows. Batch range = bucket width x this: 10 hours for an hourly aggregate, 10 days for a daily one. |
+| `refresh_newest_first` | `true` | Newest slice first, so the dashboards light up before the backlog finishes. |
+| `max_batches_per_execution` | `0` | No cap. |
+
+The batches are **sequential, not parallel** — one call is one backend doing one thing
+at a time. What each batch gets is its **own transaction**, and that is the whole
+benefit: locks released, memory reclaimed and rows visible per batch. That is exactly
+the bound the hand-written monthly windowing was buying.
+
+You can watch it happen — count committed transactions across one refresh:
+
+```sql
+SELECT xact_commit FROM pg_stat_database WHERE datname = current_database();
+CALL refresh_continuous_aggregate('cagg_wind_hourly', NULL, NULL);
+SELECT xact_commit FROM pg_stat_database WHERE datname = current_database();
+```
+
+The counter moves by hundreds. With `options => '{"buckets_per_batch": 0}'` it moves
+by one — the pre-2.28 single-transaction behaviour, and how you would reproduce the
+original OOM on purpose.
 
 Measured at the volume that used to die (12 plants x 8 turbines x 730 days = 6.73M
 rows per hypertable, 8 GiB / 4 CPU), all eight aggregates force-refreshed:
@@ -1001,13 +995,62 @@ rows per hypertable, 8 GiB / 4 CPU), all eight aggregates force-refreshed:
 | one call per aggregate, one session | 33 s | 2.27 GiB |
 
 Same memory to within noise, nothing OOM-kills, and the simple version is fastest.
-`options => '{"buckets_per_batch": 0}'` restores the old single-transaction
-behaviour, which is how you would reproduce the original failure.
+So step 08 is eight `CALL refresh_continuous_aggregate(...)` statements and nothing
+else — one per aggregate, **parents before children**. That order is a correctness
+constraint, not a tuning choice: these aggregates form a chain,
 
-One trap worth knowing: `psql -c "SET ...; CALL refresh_continuous_aggregate(...)"`
-puts both statements in one implicit transaction and **every refresh fails** with
-"cannot run inside a transaction block". Use `PGOPTIONS` for the setting, or a
-separate invocation.
+```
+power_generation  -> turbine_hourly -> plant_hourly -> regional_hourly -> regional_daily
+                                    \-> turbine_daily  \-> plant_daily
+wind_measurements -> wind_hourly    -> wind_daily
+```
+
+and refreshing a child before its parent is materialised leaves the child *empty*,
+silently. Do not sort these names alphabetically — `cagg_plant_power_daily` sorts
+before `cagg_plant_power_hourly`, which is backwards.
+
+Two traps worth knowing:
+
+- `psql -c "SET ...; CALL refresh_continuous_aggregate(...)"` puts both statements in
+  one implicit transaction and **every refresh fails** with "cannot run inside a
+  transaction block". Use `PGOPTIONS` for the setting, or a separate invocation. The
+  same restriction is why these are eight top-level statements rather than a loop: the
+  call manages its own transactions, so it cannot live in a `DO` block or a procedure.
+- `timescaledb.enable_merge_on_cagg_refresh` looks like the obvious I/O win here — it
+  makes a refresh `MERGE` rather than delete-and-reinsert, and measured on a 115k-row
+  source it cut WAL from 8462 kB to 454 kB. It does **nothing** for this workshop, and
+  says nothing about being ignored. It applies only to aggregates *without* columnstore
+  enabled, and step 09 enables columnstore on all eight (measured on a
+  columnstore-enabled aggregate: 8447 kB off, 8511 kB on). Even before step 09 runs,
+  this fill is cold — there is no old materialized data to replace, so `MERGE` has
+  nothing to improve on (7227 kB either way).
+
+### The fill also parallelises by window — measured, deliberately not shipped
+
+Concurrent refreshes of the **same** aggregate over **disjoint** windows are supported,
+provided the windows align to each aggregate's **materialization** chunk interval
+(70 days here — TimescaleDB defaults it to 10x the bucket width, not the bucket width
+itself), so workers land in different materialization chunks instead of contending to
+create one. Measured, 20 turbines x 730 days, 4 CPU:
+
+| strategy | time | speed-up |
+|---|---|---|
+| fully serial | 13590 ms | — |
+| **windows of one aggregate concurrently, aggregates in order** | **4805 ms** | **2.83x** |
+| aggregates within a dependency level concurrently | 9119 ms | 1.49x |
+| both combined | 5664 ms | 2.40x |
+
+Window-parallelism is the axis that pays; combining the two oversubscribes the CPUs.
+
+`reset_demo.sh` used to do this, and no longer does — worth explaining, because the
+reasoning generalises. Once 2.28 removed the *memory* argument for windowing, the only
+thing left was speed, and speed has to be judged against the whole build rather than
+against the fill alone: at the defaults the fill is ~16 s of a ~100 s build, so 2.83x
+saved ~10 s in exchange for a window-planning function, a config flag, a conditional
+in the SQL, and 70 lines of shell. In a workshop that trade is worse still, because
+every reader has to walk past machinery the default path never runs. The raw-data
+backfill keeps its parallel path (`--jobs`), where the same arithmetic comes out the
+other way: it is 3.67x on the dominant phase of the build.
 
 ### Nothing competes with the load
 

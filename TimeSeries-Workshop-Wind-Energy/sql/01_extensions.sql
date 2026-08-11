@@ -113,11 +113,10 @@ INSERT INTO workshop_config (key, value, description) VALUES
   -- 730-day default is ~6.8 million rows per hypertable and ~1 GB all in.
   --
   -- That volume used to be unreachable: the initial continuous-aggregate fill got
-  -- OOM-killed partway through. It is fine now because step 08 fills the
-  -- aggregates in monthly batches AND reconnects between them, which releases the
-  -- memory that was accumulating across calls in one session. Read the note there
-  -- before raising this much further — the fill is the binding constraint, not the
-  -- backfill.
+  -- OOM-killed partway through. It is fine now, and not because of anything this
+  -- workshop does — since TimescaleDB 2.28 refresh_continuous_aggregate batches
+  -- incrementally by itself, ten buckets at a time, each batch in its own
+  -- transaction. Step 08 explains it and shows how to watch the batches commit.
   -- Plants are handed out round-robin across the six regions, so num_plants = 6
   -- gives one plant per region, 12 gives two, and so on.
   ('num_plants',        '12', 'Wind Energy: wind plants to build (max 36, round-robin across 6 regions)'),
@@ -128,13 +127,7 @@ INSERT INTO workshop_config (key, value, description) VALUES
   -- Crosswind neighbours can be packed closer than downwind ones.
   ('spacing_crosswind_rotors', '5', 'Wind Energy: turbine spacing across the prevailing wind, in rotor diameters'),
   ('spacing_downwind_rotors',  '8', 'Wind Energy: turbine spacing along the prevailing wind, in rotor diameters'),
-  ('wake_decay_k',        '0.05', 'Wind Energy: Jensen wake decay constant (0.05 onshore, 0.04 offshore)'),
-  -- Set to 'true' by reset_demo.sh when it is going to fill the aggregates with
-  -- several parallel connections instead. Step 08's own serial fill then emits
-  -- no statements, so the work happens exactly once either way. Left 'false' so
-  -- that running the files by hand fills them, which is what you want when
-  -- reading them.
-  ('parallel_cagg_fill',  'false', 'Wind Energy: reset_demo.sh fills the aggregates in parallel; step 08 skips its serial fill')
+  ('wake_decay_k',        '0.05', 'Wind Energy: Jensen wake decay constant (0.05 onshore, 0.04 offshore)')
 -- DO NOTHING would keep a stale description from an older run, and the
 -- description is load-bearing: reset_demo.sh --hard identifies this
 -- workshop's keys by the 'Wind Energy: ' prefix. So refresh the description while

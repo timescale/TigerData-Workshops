@@ -557,7 +557,48 @@ Things that are NOT the cause, each ruled out by measurement rather than reasoni
 - **Not writing two hypertables from one CTE.** That shape scaled 2.55x.
 - **Not transaction scope.** One transaction per chunk instead of per window bought 14%.
 
-### The continuous-aggregate initial fill parallelises too — by WINDOW, not by aggregate — `VERIFIED`
+### Since 2.28 `refresh_continuous_aggregate()` batches by itself — sequentially, in BUCKETS — `VERIFIED`
+
+One call is no longer one giant operation, which retires the most common reason people hand-roll a
+windowed fill. Three defaults describe it, and two are easy to misread:
+
+| option | default | what it means |
+|---|---|---|
+| `buckets_per_batch` | `10` | Batch size in **buckets** — not chunks, not rows. Batch range = bucket width x this, so 10 hours for an hourly aggregate, 10 days for a daily one. |
+| `refresh_newest_first` | `true` | Newest slice first, so recent data appears while the backlog is still filling. |
+| `max_batches_per_execution` | `0` | No cap. |
+
+**The batches are SEQUENTIAL, not parallel.** One call is one backend doing one thing at a time.
+What each batch gets is its **own transaction** — locks released, memory reclaimed and rows visible
+per batch. That is what bounds peak memory; it is not concurrency, and reading it as "N in
+parallel" leads to sizing compute that nothing will use.
+
+Confirm the batching rather than trusting it, by counting commits across one call:
+
+```sql
+SELECT xact_commit FROM pg_stat_database WHERE datname = current_database();
+CALL refresh_continuous_aggregate('cagg_readings_hourly', NULL, NULL);
+SELECT xact_commit FROM pg_stat_database WHERE datname = current_database();
+```
+
+Measured on 2.29.0, 115k source rows, 2880 hourly buckets: **1202 commits** by default versus
+**6** with `options => '{"buckets_per_batch": 0}'`. `NULL, NULL` batches like any other range —
+whole-range does not mean single-transaction. `buckets_per_batch: 0` is how you deliberately
+reproduce the pre-2.28 single-transaction memory profile.
+
+Consequence for a build script: **reach for hand-rolled windowing to bound MEMORY only if you have
+measured that you need it.** Measured over eight aggregates of a four-deep hierarchy, 6.73M source
+rows per hypertable, 8 GiB / 4 CPU — the volume that used to be OOM-killed:
+
+| strategy | time | peak RSS |
+|---|---|---|
+| monthly windows + reconnect per aggregate | 37 s | 2.25 GiB |
+| **one call per aggregate, fresh connection** | **30 s** | **2.24 GiB** |
+| one call per aggregate, one session | 33 s | 2.27 GiB |
+
+Same memory to within noise, and the simple version is the fastest.
+
+### The initial fill still parallelises by WINDOW — but price it before building it — `VERIFIED`
 
 `refresh_continuous_aggregate()` can run **concurrently on the same aggregate over disjoint
 windows**. Measured on `cagg_readings_hourly`, 12 windows of 70 days: 3105 ms serial, **1258 ms on 4
@@ -580,7 +621,14 @@ four-deep hierarchy, 20 devices x 730 days, 4 CPU:
 it needs no dependency-level bookkeeping beyond the ordering correctness already demands.
 Combining the two oversubscribes the CPUs and loses ground.
 
-Two things to get right:
+**But weigh it against the whole build before you ship it.** 2.83x on the fill is a real number
+attached to a small slice: on a build where the fill is ~16 s of ~100 s, it saves ~10 s for a window
+planner, a config flag, a conditional in the SQL, and the shell to drive it. Since 2.28 removed the
+memory argument, window-parallelism is a **pure speed optimisation** — justify it by its share of
+total wall-clock, not by the speed-up factor. A teaching artifact in particular pays twice, because
+the planner is dead code on the path every reader takes.
+
+Two things to get right if you do build it:
 
 - **Order is a correctness constraint, not a performance one.** In a hierarchy, refreshing a
   child before its parent is materialised yields an **empty child, silently**. Derive the order in
@@ -602,10 +650,83 @@ Two things to get right:
 Verified lossless: after a parallel fill, the hourly aggregate's `SUM(readings)` equalled the raw
 row count exactly (1,120,992 = 1,120,992) with a **0.00000000%** difference in summed power.
 
-Worth knowing for the serial path too: **since TimescaleDB 2.28.0 `refresh_continuous_aggregate()`
-already refreshes incrementally**, `buckets_per_batch` defaulting to 10, each batch in its own
-transaction. Hand-rolled month-at-a-time windowing purely to bound memory is now partly redundant;
-`options => '{"buckets_per_batch": 0}'` restores the old single-transaction behaviour.
+### A refresh ending inside an OPEN bucket creates a permanent hole in it — `VERIFIED`
+
+The most expensive aggregate bug to find, because every individual piece of it behaves as
+documented and the result is missing rows with no error anywhere.
+
+Three facts compose badly:
+
+1. **A refresh range snaps to bucket boundaries, and the upper end snaps DOWN.** Ask for
+   `refresh_continuous_aggregate(ca, lo, now())` at 14:24 on an hourly aggregate and it refreshes up
+   to 14:00. The 14:00–15:00 bucket is *not* refreshed.
+2. **But a refresh whose range ends inside an open bucket materialises that whole bucket and moves
+   the watermark to the bucket's END.** A `NULL, NULL` refresh at 14:24 leaves the watermark at
+   **15:00 — ahead of the wall clock.** Verified directly:
+   ```sql
+   SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(
+            (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+              WHERE user_view_name = 'cagg_readings_hourly')));   -- 15:00, while now() = 14:24
+   ```
+3. **Real-time aggregation only unions raw rows ABOVE the watermark.** With the watermark at 15:00,
+   a row written at 14:30 is below it, so `materialized_only = false` does not rescue it. The bucket
+   is served entirely from a materialisation taken before that row existed.
+
+So any row written into the current bucket **after** something refreshed past it is invisible, and
+`force => true` does **not** fix it — the forced refresh's upper bound snaps down the same way, so
+it never touches the offending bucket. Measured: a job that appended rows and then refreshed with an
+upper bound of `now()` left **exactly one row per device** out of the hourly aggregate (721 raw
+rows against 720 aggregated). Refreshing with an upper bound of
+`date_trunc('hour', now()) + INTERVAL '1 hour'` brought the difference to 0.
+
+- **Bound a post-write refresh at the END of the current bucket, not at `now()`.** Refreshing past
+  `now()` is legal and materialises only buckets that actually have data. Match the bucket width:
+  `date_trunc('hour', now()) + INTERVAL '1 hour'` for hourly, `date_trunc('day', now()) +
+  INTERVAL '1 day'` for daily.
+- **Conversely, when you do NOT want the open bucket materialised, bound at
+  `date_trunc(<bucket>, now())`** and let real-time aggregation serve the incomplete one. That is
+  the right default for an initial fill: it keeps the watermark behind the wall clock, so every
+  later arrival is unioned live. Materialising an open bucket is what forfeits that.
+- **Assert the invariant in any build script**, because nothing else surfaces it:
+  ```sql
+  SELECT (SELECT COALESCE(SUM(readings), 0) FROM cagg_readings_hourly)
+       - (SELECT COUNT(*) FROM readings);        -- must be 0
+  ```
+  This requires a `COUNT(*) AS readings` column in the aggregate — worth adding for exactly this
+  reason. Verified sensitive: injecting one row into an already-materialised bucket moves it to −1.
+
+### `enable_merge_on_cagg_refresh` is silently ignored on any columnstore aggregate — `VERIFIED`
+
+`timescaledb.enable_merge_on_cagg_refresh` (2.17+, PG15+, **off** by default) makes a refresh
+`MERGE` into the materialization instead of deleting the old rows and re-inserting them, cutting
+written data and WAL. It is a genuine I/O win in a narrow band, and outside that band it does
+**nothing at all** — no warning, no error, no hint that it was ignored. Measured on 2.29.0, 115k
+source rows:
+
+| aggregate | GUC | time | WAL |
+|---|---|---|---|
+| no columnstore, **re-refresh** of a materialised range | off | 244 ms | 8462 kB |
+| no columnstore, **re-refresh** of a materialised range | **on** | 342 ms | **454 kB** — 18x less |
+| **columnstore enabled**, re-refresh | off | 277 ms | 8447 kB |
+| **columnstore enabled**, re-refresh | **on** | 259 ms | 8511 kB — **no effect** |
+| no columnstore, **cold** fill of an empty aggregate | off | 257 ms | 7225 kB |
+| no columnstore, **cold** fill of an empty aggregate | **on** | 236 ms | 7227 kB — **no effect** |
+
+Two conditions, and most real aggregates fail at least one:
+
+- **The aggregate must not have columnstore enabled.** The gate is `compression_enabled` on the
+  **aggregate** (`timescaledb_information.continuous_aggregates`), *not* whether the chunk being
+  written is compressed yet — verified by testing an aggregate with
+  `timescaledb.enable_columnstore = true` but no policy and no converted chunks: still ignored.
+  Any aggregate with a columnstore policy is therefore permanently outside the band.
+- **There must be existing materialized data to replace.** A cold fill has nothing to
+  delete-and-reinsert, so `MERGE` has nothing to improve on.
+
+Where it pays: a repeatedly-refreshed **rowstore-only** aggregate whose refresh policy has a wide
+`start_offset`, so each run rewrites buckets it has already written. Check
+`compression_enabled = false` before crediting the setting with anything, and A/B it on
+`pg_current_wal_lsn()` deltas rather than on wall-clock — the WAL reduction is the effect, and it
+cost ~40% more time at this volume.
 
 ### A single load session cannot use more than one core — `VERIFIED`
 
@@ -627,6 +748,26 @@ Measured single-session throughput, both hypertables, on cgroup-limited containe
 
 Flat past ~2 CPU. **Buy CPU for a load only if the loader is parallel; otherwise buy memory**,
 which is what the continuous-aggregate fill actually needs.
+
+The corollary matters just as much, and it points the opposite way to intuition: **because the work
+is CPU-bound in one backend, connection-level parallelism needs spare CORES to pay, and below 2 CPU
+it is a straight LOSS.** Measured, identical 563,588 rows per hypertable, whole-build wall clock,
+chunks pre-created in every case:
+
+| resources | 1 worker | 2 workers | 4 workers |
+|---|---|---|---|
+| 0.5 CPU / 2 GiB | 50 s | 68 s (**+36%**) | — |
+| 1 CPU / 4 GiB | 21 s | 24 s (**+14%**) | 30 s (**+43%**) |
+| 4 CPU / 8 GiB | 20 s | 15 s (−25%) | 13 s (−35%) |
+
+So **derive the worker count from the detected core count and let it fall to 1** — do not default a
+generated backfill to "a few" workers. On the smallest plans, which is what a service provisioned
+minutes ago will be, one worker is not a missing optimisation but the fastest setting available. The
+lever on a small service is a core (0.5 → 1 CPU nearly doubles single-session throughput), not
+concurrency.
+
+When a tool reports "serial", **say why in the same breath**, or it reads as an unimplemented
+feature: name the detected CPU count and note that more workers measured slower at that size.
 
 ### `COPY` is not faster than `INSERT .. SELECT` when the rows are generated in SQL — `VERIFIED`
 

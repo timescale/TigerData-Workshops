@@ -136,6 +136,21 @@ OPTIONS
                    query at all (PostgreSQL disables it for any data-modifying
                    statement), so throughput comes from connections, and WAL is the
                    next shared ceiling. --jobs 1 forces the serial path.
+
+                   And it falls to 1 on small services ON PURPOSE. Because the work
+                   is CPU-bound in one backend, extra connections need spare CORES to
+                   pay for themselves, and below 2 CPU they cost time. Measured, same
+                   563,588 rows per hypertable, whole build:
+
+                     0.5 CPU   50s serial   68s at 2 jobs   +36%
+                     1   CPU   21s serial   24s at 2 jobs   +14%
+                                            30s at 4 jobs   +43%
+                     4   CPU   20s serial   15s at 2 jobs   -25%
+                                            13s at 4 jobs   -35%
+
+                   So a sequential backfill on a fresh 0.5- or 1-CPU service is the
+                   fastest setting available, not a missing optimisation. The lever
+                   there is a core, not concurrency.
   --tiering        Apply the object-storage tiering policies in step 14.
                    OFF by default, and deliberately so: tiering ships data to an
                    object store, which is billable, and while removing a policy
@@ -443,8 +458,18 @@ if [ "$RAM_MB" -gt 0 ]; then
   if [ "$EFF_JOBS" -gt 1 ]; then
     say "  backfill   : ${EFF_JOBS} parallel workers over chunk-aligned windows"
     say "               (chunks pre-created first — that is what lets them run concurrently)"
+  elif [ -n "$JOBS" ]; then
+    say "  backfill   : serial (--jobs 1)"
   else
-    say "  backfill   : serial"
+    # Say WHY, because "serial" on its own reads like a missing feature. It is not:
+    # the backfill is CPU-bound in one backend, so extra connections need extra CORES
+    # to run on. Measured, same 563,588 rows per hypertable, whole build:
+    #   0.5 CPU   50s serial   68s at 2 jobs   (+36%)
+    #   1   CPU   21s serial   24s at 2 jobs   (+14%)   30s at 4 jobs  (+43%)
+    #   4   CPU   20s serial   15s at 2 jobs   (-25%)   13s at 4 jobs  (-35%)
+    # Below 2 CPU concurrency is a straight loss, so one worker is the right answer.
+    say "  backfill   : serial — only ~$(( CPU_TENTHS / 10 )).$(( CPU_TENTHS % 10 )) CPU detected"
+    say "               (extra workers measured SLOWER below 2 CPU; --jobs N overrides)"
   fi
   if [ "$EST_SECS" -lt 60 ]; then
     say "  build est. : ~${EST_SECS}s"
@@ -558,8 +583,6 @@ run_part_from() {
       case "$base" in "$start_prefix"*) started="yes" ;; *) continue ;; esac
     fi
     case "$base" in 07_backfill_historical.sql) parallel_backfill ;; esac
-    case "$base" in 08_continuous_aggregates.sql) cagg_fill_flag ;; esac
-    case "$base" in 09_compression_retention.sql) parallel_cagg_fill ;; esac
     printf '  %-44s' "$base"
     if out=$(psql_q -f "$f" 2>&1); then
       ok "ok"
@@ -639,77 +662,6 @@ PLANEOF
   rm -rf "$tmpd"
 }
 
-# --------------------------------------------------------------------------
-# Parallel initial fill of the continuous aggregates.
-#
-# ORCHESTRATION ONLY: every aggregate name and every window comes from
-# cagg_fill_plan() in the database, which orders the aggregates so no child is ever
-# refreshed before its parent, and aligns the windows to each aggregate's own
-# MATERIALIZATION chunk interval (70 days — TimescaleDB defaults it to 10x the
-# bucket width) so concurrent workers land in different materialization chunks.
-#
-# Aggregates are processed IN ORDER; only the windows of a single aggregate run
-# concurrently. Measured, 20 turbines x 730 days, 4 CPU, all eight aggregates:
-#   fully serial                                        13590 ms
-#   4 window workers per aggregate                       4805 ms   2.83x
-#   aggregates within a dependency level concurrently    9119 ms   1.49x
-#   both combined                                        5664 ms   2.40x
-# Running whole aggregates concurrently is slower AND needs dependency-level
-# bookkeeping, so it is deliberately not done.
-# --------------------------------------------------------------------------
-
-# Runs just BEFORE 08 creates the aggregates: tell it to skip its own serial fill.
-cagg_fill_flag() {
-  [ "${EFF_JOBS:-1}" -le 1 ] && return 0
-  psql_q -c "UPDATE workshop_config SET value='true' WHERE key='parallel_cagg_fill';" >/dev/null 2>&1 || true
-}
-
-# Runs just AFTER 08, before 09.
-parallel_cagg_fill() {
-  [ "${EFF_JOBS:-1}" -le 1 ] && return 0
-
-  ordered="$(psql_val "SELECT string_agg(cagg, ' ' ORDER BY seq)
-                         FROM (SELECT DISTINCT seq, cagg FROM cagg_fill_plan()) d" 2>/dev/null)"
-  if [ -z "$ordered" ]; then
-    psql_q -c "UPDATE workshop_config SET value='false' WHERE key='parallel_cagg_fill';" >/dev/null 2>&1 || true
-    return 0
-  fi
-  n_win="$(psql_val "SELECT count(*) FROM cagg_fill_plan()" 2>/dev/null)"
-  printf '  %-44s' "fill aggregates x ${EFF_JOBS} (${n_win} windows)"
-
-  tmpd="$(mktemp -d)"; bad=0
-  for ca in $ordered; do
-    psql_val "SELECT string_agg(win_from || '|' || win_to, E'\n' ORDER BY win_from)
-                FROM cagg_fill_plan() WHERE cagg = '$ca'" > "$tmpd/w.txt" 2>/dev/null
-    pids=""
-    for k in $(seq 0 $((EFF_JOBS - 1))); do
-      ( i=0
-        while IFS='|' read -r wf wt; do
-          [ -z "$wf" ] && continue
-          if [ $((i % EFF_JOBS)) -eq "$k" ]; then
-            psql_q -c "CALL refresh_continuous_aggregate('$ca','$wf'::timestamptz,'$wt'::timestamptz);" \
-              >>"$tmpd/$ca.log" 2>&1 || echo fail >>"$tmpd/$ca.rc"
-          fi
-          i=$((i + 1))
-        done < "$tmpd/w.txt" ) &
-      pids="$pids $!"
-    done
-    for pp in $pids; do wait "$pp" 2>/dev/null || true; done
-    [ -f "$tmpd/$ca.rc" ] && bad=1
-  done
-
-  # Restore the flag either way, so a later hand-run of 08 still fills serially.
-  psql_q -c "UPDATE workshop_config SET value='false' WHERE key='parallel_cagg_fill';" >/dev/null 2>&1 || true
-
-  if [ "$bad" -ne 0 ]; then
-    printf '%sFAILED%s\n' "$C_RED" "$C_RESET"
-    for l in "$tmpd"/*.log; do grep -iE 'ERROR|DETAIL' "$l" 2>/dev/null | head -3 | sed 's/^/      /'; done
-    rm -rf "$tmpd"
-    die "Parallel aggregate fill failed. Re-run with --jobs 1 for the serial path."
-  fi
-  ok "ok"
-  rm -rf "$tmpd"
-}
 
 run_part() {
   part_dir="$1"; part_label="$2"
@@ -717,8 +669,6 @@ run_part() {
   [ -d "$part_dir/sql" ] || die "Missing directory: $part_dir/sql"
   for f in "$part_dir"/sql/*.sql; do
     case "$(basename "$f")" in 07_backfill_historical.sql) parallel_backfill ;; esac
-    case "$(basename "$f")" in 08_continuous_aggregates.sql) cagg_fill_flag ;; esac
-    case "$(basename "$f")" in 09_compression_retention.sql) parallel_cagg_fill ;; esac
     printf '  %-44s' "$(basename "$f")"
     if out=$(psql_q -f "$f" 2>&1); then
       ok "ok"
@@ -846,6 +796,16 @@ ORPHANS=$(psql_val "SELECT COUNT(*) FROM power_generation p
   WHERE NOT EXISTS (SELECT 1 FROM turbines t WHERE t.turbine_id = p.turbine_id);")
 if [ "$ORPHANS" = "0" ]; then ok "  no telemetry for unknown turbines"
 else warn "  $ORPHANS orphaned telemetry rows"; BAD=1; fi
+
+# The hourly aggregate must account for EVERY raw row. This catches the failure that
+# nothing else here would: a refresh whose upper bound lands inside an open bucket
+# materialises that whole bucket and pushes the watermark past the wall clock, so rows
+# written into the bucket afterwards are neither materialised nor picked up by real-time
+# aggregation. It showed up as exactly one missing row per turbine added in step 12.
+UNCOUNTED=$(psql_val "SELECT (SELECT COALESCE(SUM(readings),0) FROM cagg_turbine_power_hourly)
+                           - (SELECT COUNT(*) FROM power_generation);")
+if [ "$UNCOUNTED" = "0" ]; then ok "  hourly aggregate accounts for every raw telemetry row"
+else warn "  hourly aggregate is off by $UNCOUNTED rows against power_generation"; BAD=1; fi
 
 # One row out means one plant disagrees, so count lines rather than read a value.
 MISMATCH=$(psql_val "SELECT p.plant_id FROM plants p

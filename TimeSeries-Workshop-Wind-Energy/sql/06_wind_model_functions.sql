@@ -422,19 +422,26 @@ SELECT dir                                                     AS wind_from_deg,
 -- ============================================================================
 -- One INSERT ... SELECT per target table over a CROSS JOIN of turbines and a
 -- 15-minute time series. Still set-based — no row-by-row processing — but wrapped
--- in a loop over ONE-MONTH windows.
+-- in a loop over CHUNK-ALIGNED windows, one chunk interval per batch. The worker
+-- reads that interval from the catalog rather than hardcoding it (7 days by
+-- default), so changing it in step 03 changes the batching to match.
 --
 -- The loop is there because of the default window. 96 turbines x 730 days x 96
 -- samples/day is 6.7 million rows in each hypertable, and the MATERIALIZED CTE
 -- below has to hold a whole batch at once: run that as a single statement and
 -- PostgreSQL either consumes a great deal of memory or spills the CTE to a temp
 -- file, and either way the attendee stares at a silent psql prompt for minutes
--- with no idea whether it is working. A month at a time bounds the working set to
--- ~276,000 rows and lets each batch report itself.
+-- with no idea whether it is working. A chunk at a time bounds the working set to
+-- ~65,000 rows at the defaults and lets each batch report itself.
+--
+-- Aligning the batches to CHUNKS rather than to calendar months is what makes the
+-- parallel path possible: two workers on disjoint chunk-aligned windows never touch
+-- the same chunk, so they never contend for the ShareUpdateExclusiveLock that chunk
+-- creation takes on the parent hypertable and holds until commit.
 --
 -- The batches tile the window exactly once. generate_series is inclusive at both
 -- ends, so each batch stops one step SHORT of the next batch's start; get that
--- wrong and every month boundary gets a duplicated timestamp.
+-- wrong and every chunk boundary gets a duplicated timestamp.
 --
 -- Batching does not change what is generated. wind_at() is a pure function of
 -- (turbine, time), so a row's value does not depend on which batch produced it —

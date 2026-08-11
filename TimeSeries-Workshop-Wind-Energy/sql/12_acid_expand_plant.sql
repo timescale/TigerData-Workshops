@@ -532,21 +532,39 @@ SELECT t.name,
 --     instance and takes the whole database down with it
 --
 -- Order matters: parents before the aggregates that read them.
-
+--
+-- NOTE THE UPPER BOUND, because `now()` is WRONG here and wrong in a way that hides.
+-- A refresh range is snapped to bucket boundaries, and the upper end snaps DOWN: ask
+-- for `..., now())` at 14:24 and an hourly aggregate refreshes up to 14:00, leaving the
+-- 14:00-15:00 bucket untouched. That is the very bucket the rows above just landed in,
+-- so each new turbine's newest reading is silently left out of the aggregate.
+--
+-- Real-time aggregation does not save you, and the reason is worth understanding. Step
+-- 10 already refreshed these with NULL, NULL, and refreshing a range that ends inside
+-- an open bucket MATERIALISES that whole bucket and moves the watermark to its END —
+-- so the watermark here is 15:00 while the wall clock says 14:24. Real-time
+-- aggregation only unions raw rows ABOVE the watermark, and 14:24 is below it. The
+-- bucket is therefore served entirely from a materialisation taken before these rows
+-- existed. Symptom, measured on a 4-turbine expansion: 721 raw rows per new turbine
+-- against 720 in the aggregate. `force => true` does not fix it either — the forced
+-- refresh's upper bound snaps down exactly the same way.
+--
+-- So bound it at the END of the current bucket. Refreshing past `now()` is legal and
+-- materialises only buckets that actually have data.
 CALL refresh_continuous_aggregate('cagg_turbine_power_hourly',
-       now() - INTERVAL '31 days', now());
+       now() - INTERVAL '31 days', date_trunc('hour', now()) + INTERVAL '1 hour');
 CALL refresh_continuous_aggregate('cagg_turbine_power_daily',
-       now() - INTERVAL '31 days', now());
+       now() - INTERVAL '31 days', date_trunc('day',  now()) + INTERVAL '1 day');
 CALL refresh_continuous_aggregate('cagg_plant_power_hourly',
-       now() - INTERVAL '31 days', now());
+       now() - INTERVAL '31 days', date_trunc('hour', now()) + INTERVAL '1 hour');
 CALL refresh_continuous_aggregate('cagg_regional_power_hourly',
-       now() - INTERVAL '31 days', now());
+       now() - INTERVAL '31 days', date_trunc('hour', now()) + INTERVAL '1 hour');
 
 -- The weather chain too — expand_plant() wrote wind_measurements as well.
 CALL refresh_continuous_aggregate('cagg_wind_hourly',
-       now() - INTERVAL '31 days', now());
+       now() - INTERVAL '31 days', date_trunc('hour', now()) + INTERVAL '1 hour');
 CALL refresh_continuous_aggregate('cagg_wind_daily',
-       now() - INTERVAL '31 days', now());
+       now() - INTERVAL '31 days', date_trunc('day',  now()) + INTERVAL '1 day');
 
 -- The plant tier now reports the expanded plant, and the region tier above it
 -- agrees, because both were rebuilt from the same committed rows.
