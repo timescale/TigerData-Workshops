@@ -66,6 +66,25 @@ Use the Tiger MCP server with an AI coding assistant (e.g., Claude Code) to desi
 
 **[>> Go to the Agentic Postgres Workshop](./Agentic-Postgres-Workshop)**
 
+### 10. Spatial Time-Series: Wind Energy
+
+PostGIS and hypertables on **fixed-location** assets. Builds a portfolio of wind plants across six
+real geographic regions, laying each plant's turbines out on a geodesic grid with `ST_Project` and
+modelling how they steal each other's wind (front-row machines lose 3% of output, interior ones 9%).
+Covers geography vs geometry, `ST_DWithin` versus filtering on `ST_Distance`, point-in-polygon
+dimensions denormalised onto fact rows, and a four-tier continuous-aggregate hierarchy. Ships **two
+years** of 15-minute telemetry — 3.4 M rows per hypertable at the defaults — with each region given
+its own seasonal wind and temperature cycle, so the Deccan monsoon peaks in July while the North Sea
+peaks in January. Fleet size and history depth are parameters (`--plants`,
+`--turbines-per-plant`, `--days`), so the same workshop runs at 5,000 rows or 13 million. Four
+provisioned Grafana dashboards form a global > region > plant > turbine drill-through with cascading
+filters; the turbine view selects its own source — raw hypertable, hourly aggregate or daily
+aggregate — from the current zoom level, with the untaken branches pruned out of the query plan.
+Optional scattered tiering to object storage, with a different threshold per object derived from how
+each dashboard reads it. Self-generating data.
+
+**[>> Go to the Wind Energy Workshop](./TimeSeries-Workshop-Wind-Energy)**
+
 ## Getting Started
 
 To get started, navigate to the directory of the workshop you are interested in and follow the instructions in its respective `README.md` file.

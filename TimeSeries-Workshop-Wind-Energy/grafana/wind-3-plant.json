@@ -1,0 +1,1297 @@
+{
+ "title": "Wind — 3. Plant",
+ "uid": "wind-plant",
+ "timezone": "browser",
+ "schemaVersion": 38,
+ "refresh": "1m",
+ "tags": [
+  "postgis-workshop",
+  "wind",
+  "tier-plant"
+ ],
+ "time": {
+  "from": "now-7d",
+  "to": "now"
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "plant",
+    "label": "Plant",
+    "type": "query",
+    "datasource": {
+     "type": "grafana-postgresql-datasource",
+     "uid": "tigerdata"
+    },
+    "query": {
+     "refId": "plant-variable-query",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "rawSql": "SELECT plant_name AS __text, plant_id::text AS __value FROM plants ORDER BY plant_name"
+    },
+    "refresh": 1,
+    "sort": 1,
+    "includeAll": false,
+    "multi": false,
+    "current": {},
+    "options": []
+   },
+   {
+    "name": "turbine",
+    "label": "Turbine",
+    "type": "query",
+    "datasource": {
+     "type": "grafana-postgresql-datasource",
+     "uid": "tigerdata"
+    },
+    "query": {
+     "refId": "turbine-variable-query",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "rawSql": "SELECT t.name AS __text, t.turbine_id::text AS __value FROM turbines t WHERE t.plant_id = NULLIF('$plant','')::uuid ORDER BY t.name"
+    },
+    "refresh": 1,
+    "sort": 1,
+    "includeAll": true,
+    "multi": false,
+    "current": {
+     "selected": true,
+     "text": "All",
+     "value": "$__all"
+    },
+    "options": [
+     {
+      "selected": true,
+      "text": "All",
+      "value": "$__all"
+     }
+    ],
+    "allValue": "%"
+   }
+  ]
+ },
+ "links": [
+  {
+   "title": "Back to global",
+   "type": "link",
+   "url": "/d/wind-global",
+   "icon": "arrow-left"
+  },
+  {
+   "title": "Back to region",
+   "type": "link",
+   "url": "/d/wind-region",
+   "icon": "arrow-left"
+  }
+ ],
+ "panels": [
+  {
+   "id": 1,
+   "type": "stat",
+   "title": "Plant Output",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 5,
+    "x": 0,
+    "y": 0
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 2,
+     "unit": "megwatt",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "green"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT SUM(avg_power_kw)/1000.0 AS \"MW\"\n  FROM v_turbine_hourly\n WHERE bucket = (SELECT MAX(bucket) FROM cagg_turbine_power_hourly\n              WHERE bucket <= $__timeTo()::timestamptz)\n   AND plant_id = NULLIF('$plant','')::uuid\n   AND turbine_id::text LIKE '$turbine';"
+    }
+   ],
+   "description": "Reads the TURBINE tier — the only tier that needs per-machine detail, and the only one that pays for it."
+  },
+  {
+   "id": 2,
+   "type": "stat",
+   "title": "Capacity Factor",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 5,
+    "x": 5,
+    "y": 0
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 1,
+     "unit": "percent",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 20
+       },
+       {
+        "color": "green",
+        "value": 32
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT 100.0*SUM(avg_power_kw)/NULLIF(SUM(rated_capacity_kw),0) AS \"CF\"\n  FROM v_turbine_hourly\n WHERE bucket = (SELECT MAX(bucket) FROM cagg_turbine_power_hourly\n              WHERE bucket <= $__timeTo()::timestamptz)\n   AND plant_id = NULLIF('$plant','')::uuid\n   AND turbine_id::text LIKE '$turbine';"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "stat",
+   "title": "Performance Ratio",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 5,
+    "x": 10,
+    "y": 0
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 1,
+     "unit": "percent",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 90
+       },
+       {
+        "color": "yellow",
+        "value": 96
+       },
+       {
+        "color": "green",
+        "value": 98.5
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT 100.0*SUM(avg_power_kw)/NULLIF(SUM(avg_expected_power_kw),0) AS \"PR\"\n  FROM v_turbine_hourly\n WHERE bucket = (SELECT MAX(bucket) FROM cagg_turbine_power_hourly\n              WHERE bucket <= $__timeTo()::timestamptz)\n   AND plant_id = NULLIF('$plant','')::uuid\n   AND turbine_id::text LIKE '$turbine';"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "Wake Loss",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 5,
+    "x": 15,
+    "y": 0
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 1,
+     "unit": "percent",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 8
+       },
+       {
+        "color": "orange",
+        "value": 15
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT AVG(avg_wake_loss_pct) AS \"Wake\"\n  FROM v_turbine_hourly\n WHERE bucket = (SELECT MAX(bucket) FROM cagg_turbine_power_hourly\n              WHERE bucket <= $__timeTo()::timestamptz)\n   AND plant_id = NULLIF('$plant','')::uuid\n   AND turbine_id::text LIKE '$turbine';"
+    }
+   ],
+   "description": "Output lost to turbines shading each other inside this plant. Judges the LAYOUT, not the machines."
+  },
+  {
+   "id": 5,
+   "type": "stat",
+   "title": "Turbines Derated",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 20,
+    "y": 0
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 0,
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "red"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT COUNT(DISTINCT f.turbine_id) AS \"Faulted\"\n  FROM turbine_faults f\n  JOIN turbines t ON t.turbine_id = f.turbine_id\n -- Faulted AS OF the end of the window; see the note on the region dashboard.\n WHERE f.started_at <= $__timeTo()::timestamptz\n   AND (f.resolved_at IS NULL OR f.resolved_at > $__timeTo()::timestamptz)\n   AND t.plant_id = NULLIF('$plant','')::uuid\n   AND t.turbine_id::text LIKE '$turbine';"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "geomap",
+   "title": "Turbine layout — $plant",
+   "description": "Auto-zooms to the plant (view = 'fit'), so you can see the actual grid: rows spaced 8 rotor diameters along the prevailing wind, columns 5 across it, and every odd row STAGGERED half a spacing sideways so the machine ahead of you is never directly ahead it. Markers are sized by output and coloured by performance ratio — a faulted machine shows up red in an otherwise green array, and its GRID POSITION is right there.\n\nTWO ARROWS, ONE ANGLE. Parked off the flank of the array is a pair of route arrows\njoined nose-to-tail, and the angle between their shafts is the whole point:\n\n  LIGHT GREY = the plant's LAYOUT AXIS, the bearing its grid was built on.\n  BLUE       = the WIND now blowing over the plant, springing from the grey arrow's tip.\n\nWhen they run nearly straight, the array is taking the wind head-on down its wide\nspacing and wake losses are at their lowest. When they form an elbow, the wind has swung\noff the axis the array was designed for and rows begin to shadow each other. The blue arrow's LENGTH is a BOUNDED indicator of speed: 0.30 to 0.55 of the array length\nas wind runs 0 to 25 m/s. This is a deliberate trade and worth stating plainly, because\nearlier revisions made length strictly proportional to speed. This panel exists to show\nthe ANGLE, which needs both shafts comparable in length AND inside the fitted extent; a\nstrictly proportional arrow across a 12x speed range can satisfy neither — at the fleet\nmedian it drew 111 m against a 1311 m axis arrow, an unreadable stub. Exact speed is in\nthe `wind_ms` tooltip field and on the wind timeline below. `misalignment_deg` in the tooltip is that angle as a\nnumber, 0 (straight down the rows) to 90 (straight across them).\n\nWHY THE GREY ARROW SOMETIMES POINTS THE 'WRONG' WAY. A grid axis is a LINE, not a\nheading: rows spaced along 290 degrees are equally spaced along 110. Drawing the grey\narrow always at `grid_bearing_deg` meant that whenever the wind ran the other way down\nthat same axis, the blue arrow doubled back over the grey one and the angle was\nunreadable — measured on this fleet, a plant with `grid_bearing_deg` 290 and wind toward\n96 put the two shafts 194 degrees apart and overlapping. So the grey arrow is drawn in\nwhichever of its two senses FACES the wind. The tooltip carries both `grid_bearing_deg`\n(the canonical layout bearing, never altered) and `axis_drawn_deg` (the sense actually\ndrawn), so the flip is explicit rather than mysterious.\n\nThat choice is what guarantees the picture is always readable: verified exhaustively over\nall 5184 combinations of grid bearing and wind bearing at 5-degree steps, the on-screen\nangle never exceeds 90 degrees, always equals the true misalignment against the axis, and\n`axis_drawn_deg` is always one of the two real axis directions — never an invented one.\n\nA SINGLE WIND ARROW, not one per turbine. Grafana's route layer renders only its FIRST\nframe and joins all of that frame's points into one line (`routeLayer.tsx`:\n`break; // Only the first frame for now!`), so every route arrow costs its own layer and\nquery. Per-turbine arrows therefore meant one layer per turbine and a hard ceiling;\ncollapsing to one plant-level arrow removes the ceiling entirely and makes the\narray-versus-wind angle the thing you actually read. Per-turbine inflow is still\navailable as a timeline below.\n\nTWO POINTS PER ARROW. Grafana draws one arrowhead PER SEGMENT, so a three-point route\ngrows a second head halfway down its own shaft. Two points give one clean head.\n\nThe bearing is a genuine CIRCULAR MEAN over the plant's turbines, from the unit-vector\ncomponent sums in cagg_wind_hourly — there is no correct way to average a bearing\narithmetically. The tooltip carries both `wind_from_deg` (the meteorological convention:\nwhere the wind comes FROM) and `wind_toward_deg` (where it is going, which is where the\nhead points), because an arrow drawn 180 degrees out looks entirely plausible.\n`steadiness` is the mean resultant length, 0-1; below 0.01 the arrow is suppressed\nrather than pointing somewhere invented, and the grey axis still draws on its own.\n\nEverything reads over a 3-HOUR TRAILING WINDOW rather than the single latest bucket,\nincluding the turbine markers. Turbines commissioned by 12_acid_expand_plant.sql lag the\nfleet by one bucket, and an equality join on MAX(bucket) dropped them outright: the plant\nmap showed 8 of 12 turbines and the ACID expansion demo could not display the machines it\nhad just added.\n\nThe grey arrow's anchor is offset perpendicular to the grid axis by 1.35x the array's\nACROSS extent so it never lands on a turbine marker (measured clearance 258-391 m). That\nextent is decomposed from each turbine's offset into along-axis and across-axis\ncomponents rather than taken as a radius, because the array is deliberately elongated —\nrows 8 rotor diameters apart downwind, columns 5 across — and a radius overshoots the\nshort flank and parks the arrow outside the layout entirely.\n\nMAP VIEW: `allLayers: false` with `layer: \"Turbines\"` — pinned to one always-populated\nlayer. An earlier revision used `allLayers: true` so the fit would frame the arrows; that\nis what broke fit-to-data on this panel. grafana/grafana#89777: a geomap with a basemap\nplus at least one additional layer stays zoomed out instead of fitting. Observed on\n13.1.1 — this panel fits with the layer pinned and does not with `allLayers: true`.\n\nBecause the fit only sees the Turbines layer, BOTH ARROWS ARE ANCHORED INSIDE THE ARRAY\nFOOTPRINT, nudged a quarter of the array's across-extent off centre so the vertex does not\nsit on the middle turbine. That is a constraint, not a preference: overlays parked outside\nthe pinned layer's extent cannot be rescued with padding, because padding scales an\nelongated bounding box proportionally. Swept through all 36 wind bearings, an outside\nanchor left 9-11 of 38 points beyond the viewport at every padding from 20 to 60; the\ninside anchor gives 38/38, verified on both plants.\n\nAlso note: if the queries return NO rows, the fit does not run at all — Grafana guards on\nan empty extent — and the map sits at centre 0,0 zoom 1, which looks exactly like \"fit is\nbroken\". An unresolved dashboard variable interpolates as empty and `LIKE ''` matches\nnothing, so check for rows before suspecting the view config.\n\nEXPERIMENT — a no-op `organize` transformation is attached to this panel, and to no\nother. It is not here for the data. It tests whether the initial \"fit to data\" zoom\nfailing on load is a timing problem: grafana/grafana#76599 reports that a panel with a\ntransformation receives its data twice (once untransformed, once transformed), and the\nsecond delivery would arrive with the map already created, re-triggering the fit that\nthe first pass skipped. Reproduced on Grafana 13.1.1 AND 13.1.3.\n\nIf the initial zoom is correct on this panel and still wrong on wind-4-turbine, the\ncause is timing and this is the workaround. If both are still wrong, remove this —\nit earns nothing and an unexplained transformation in a teaching file is a cost.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 14,
+    "w": 13,
+    "x": 0,
+    "y": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "decimals": 0,
+     "color": {
+      "mode": "continuous-RdYlGr"
+     },
+     "links": [
+      {
+       "title": "Turbine detail (30-day history) →",
+       "url": "/d/wind-turbine/wind-4-turbine?var-plant=${__data.fields.plant_id}&var-turbine=${__data.fields.turbine_id}&${__url_time_range}",
+       "targetBlank": false
+      }
+     ]
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "latitude"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "none"
+       },
+       {
+        "id": "decimals",
+        "value": 4
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "longitude"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "none"
+       },
+       {
+        "id": "decimals",
+        "value": 4
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "power_kw"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "kwatt"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "performance_ratio_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "wake_loss_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "grid_row"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "short"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "grid_col"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "short"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "turbine_id"
+      },
+      "properties": [
+       {
+        "id": "custom.hidden",
+        "value": true
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "plant_id"
+      },
+      "properties": [
+       {
+        "id": "custom.hidden",
+        "value": true
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "wind_toward_deg"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "degree"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "wind_from_deg"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "degree"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "grid_bearing_deg"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "degree"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "wind_ms"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "velocityms"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "steadiness"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "none"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "leg_m"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "lengthm"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "point_seq"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "short"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "view": {
+     "id": "fit",
+     "allLayers": true,
+     "padding": 25,
+     "maxZoom": 15
+    },
+    "basemap": {
+     "type": "default",
+     "name": "Basemap"
+    },
+    "controls": {
+     "showZoom": true,
+     "showAttribution": true,
+     "showScale": false
+    },
+    "tooltip": {
+     "mode": "details"
+    },
+    "layers": [
+     {
+      "type": "markers",
+      "name": "Turbines",
+      "tooltip": true,
+      "location": {
+       "mode": "coords",
+       "latitude": "latitude",
+       "longitude": "longitude"
+      },
+      "config": {
+       "style": {
+        "size": {
+         "field": "power_kw",
+         "fixed": 8,
+         "min": 9,
+         "max": 28
+        },
+        "color": {
+         "field": "performance_ratio_pct",
+         "fixed": "green"
+        },
+        "opacity": 0.75,
+        "symbol": {
+         "mode": "fixed",
+         "fixed": "img/icons/marker/circle.svg"
+        }
+       },
+       "showLegend": true
+      },
+      "filterData": {
+       "id": "byRefId",
+       "options": "A"
+      }
+     },
+     {
+      "type": "route",
+      "name": "Plant orientation",
+      "filterData": {
+       "id": "byRefId",
+       "options": "B"
+      },
+      "location": {
+       "mode": "coords",
+       "latitude": "latitude",
+       "longitude": "longitude"
+      },
+      "tooltip": true,
+      "config": {
+       "style": {
+        "color": {
+         "fixed": "#B7BEC7"
+        },
+        "opacity": 0.9,
+        "lineWidth": 3,
+        "size": {
+         "fixed": 5,
+         "min": 2,
+         "max": 15
+        }
+       },
+       "arrow": 1
+      }
+     },
+     {
+      "type": "route",
+      "name": "Wind",
+      "filterData": {
+       "id": "byRefId",
+       "options": "C"
+      },
+      "location": {
+       "mode": "coords",
+       "latitude": "latitude",
+       "longitude": "longitude"
+      },
+      "tooltip": true,
+      "config": {
+       "style": {
+        "color": {
+         "fixed": "blue"
+        },
+        "opacity": 0.9,
+        "lineWidth": 3,
+        "size": {
+         "fixed": 5,
+         "min": 2,
+         "max": 15
+        }
+       },
+       "arrow": 1
+      }
+     }
+    ]
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT t.name                                     AS turbine,\n       t.turbine_id::text                            AS turbine_id,\n       t.plant_id::text                              AS plant_id,\n       t.grid_row, t.grid_col,\n       ST_Y(t.location::geometry)                    AS latitude,\n       ST_X(t.location::geometry)                    AS longitude,\n       ROUND(h.avg_power_kw::numeric,0)              AS power_kw,\n       ROUND(h.performance_ratio_pct::numeric,1)     AS performance_ratio_pct,\n       ROUND(h.avg_wake_loss_pct::numeric,1)         AS wake_loss_pct,\n       COALESCE(af.fault_type, 'none')               AS active_fault\n  FROM turbines t\n  -- Each turbine's most recent hourly row, NOT a join pinned to the fleet-wide\n  -- MAX(bucket). Turbines commissioned by 12_acid_expand_plant.sql lag the fleet by\n  -- one bucket, and an equality join on that bucket dropped them from the map\n  -- entirely -- the ACID expansion demo could not show the turbines it had just\n  -- added. LEFT JOIN so a turbine with no telemetry at all still gets a marker.\n  LEFT JOIN LATERAL (\n    SELECT h.avg_power_kw, h.performance_ratio_pct, h.avg_wake_loss_pct\n      FROM v_turbine_hourly h\n     WHERE h.turbine_id = t.turbine_id\n       AND h.bucket > (SELECT MAX(bucket) FROM cagg_turbine_power_hourly\n              WHERE bucket <= $__timeTo()::timestamptz)\n                      - INTERVAL '3 hours'\n     ORDER BY h.bucket DESC\n     LIMIT 1\n  ) h ON true\n  LEFT JOIN LATERAL (\n    SELECT f.fault_type FROM turbine_faults f\n     WHERE f.turbine_id = t.turbine_id AND f.resolved_at IS NULL\n     ORDER BY f.severity DESC LIMIT 1) af ON true\n WHERE t.plant_id = NULLIF('$plant','')::uuid\n   AND t.turbine_id::text LIKE '$turbine'\n ORDER BY t.grid_row, t.grid_col;"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "format": "table",
+     "rawQuery": true,
+     "rawSql": "WITH p AS (\n  SELECT plant_id, plant_name, center_location, grid_bearing_deg\n    FROM plants\n   WHERE plant_id = NULLIF('$plant','')::uuid\n),\n-- Decompose each turbine's offset from the plant centre into components ALONG and\n-- ACROSS the grid axis. A plain radius will not do: the array is deliberately\n-- elongated (rows 8 rotor diameters apart downwind, columns 5 across, odd rows\n  -- staggered half a spacing).\ne AS (\n  SELECT p.plant_id,\n         COALESCE(MAX(ABS(ST_Distance(p.center_location, t.location)\n                     * COS(ST_Azimuth(p.center_location, t.location)\n                           - RADIANS(p.grid_bearing_deg)))), 400.0) AS along_m,\n         COALESCE(MAX(ABS(ST_Distance(p.center_location, t.location)\n                     * SIN(ST_Azimuth(p.center_location, t.location)\n                           - RADIANS(p.grid_bearing_deg)))), 400.0) AS across_m\n    FROM p\n    LEFT JOIN turbines t\n           ON t.plant_id = p.plant_id\n          -- ST_Azimuth is undefined for coincident points and returns NULL, which\n          -- would propagate through COS/SIN/MAX and erase the overlay.\n          AND ST_Distance(p.center_location, t.location) > 0\n   GROUP BY p.plant_id\n),\nw AS (\n  SELECT h.plant_id,\n         SUM(h.dir_sin_sum)                                                 AS dir_sin_sum,\n         SUM(h.dir_cos_sum)                                                 AS dir_cos_sum,\n         SUM(h.readings)                                                    AS readings,\n         SUM(h.avg_free_wind_ms * h.readings) / NULLIF(SUM(h.readings), 0)   AS wind_ms\n    FROM cagg_wind_hourly h\n   -- A 3-hour trailing window rather than the single latest bucket: turbines\n   -- commissioned by 12_acid_expand_plant.sql lag the fleet by one bucket, and\n   -- pinning to MAX(bucket) drops them from the average.\n   WHERE h.bucket > (SELECT MAX(bucket) FROM cagg_wind_hourly\n              WHERE bucket <= $__timeTo()::timestamptz) - INTERVAL '3 hours'\n     AND h.plant_id = NULLIF('$plant','')::uuid\n   GROUP BY h.plant_id\n  -- Suppress the wind arrow when the plant's wind boxed the compass: the resultant\n  -- collapses and ATAN2(0,0) would return a confident due north.\n  HAVING SQRT(SUM(h.dir_sin_sum)^2 + SUM(h.dir_cos_sum)^2) >= 0.01 * SUM(h.readings)\n),\na AS (\n  SELECT p.plant_id,\n         p.plant_name,\n         p.grid_bearing_deg,\n         e.along_m,\n         w.wind_ms, w.dir_sin_sum, w.dir_cos_sum, w.readings,\n         MOD((DEGREES(ATAN2(w.dir_sin_sum, w.dir_cos_sum)) + 540.0)::numeric,\n             360.0)::float8                                  AS wind_toward_deg,\n         -- WHICH WAY TO DRAW THE GREY ARROW. A grid axis is a LINE, not a heading:\n         -- rows spaced along 290 degrees are equally spaced along 110. Drawing it\n         -- always at grid_bearing_deg meant that when the wind ran the other way down\n         -- the same axis, the blue arrow doubled back over the grey one and the angle\n         -- was unreadable. Pick the sense that faces the wind; with no wind reading,\n         -- fall back to grid_bearing_deg unchanged.\n         CASE\n           WHEN w.dir_sin_sum IS NULL THEN p.grid_bearing_deg\n           WHEN LEAST(ABS(MOD((DEGREES(ATAN2(w.dir_sin_sum, w.dir_cos_sum)) + 540.0)::numeric,\n                              360.0)::float8 - p.grid_bearing_deg),\n                      360.0 - ABS(MOD((DEGREES(ATAN2(w.dir_sin_sum, w.dir_cos_sum)) + 540.0)::numeric,\n                                      360.0)::float8 - p.grid_bearing_deg)) <= 90.0\n             THEN p.grid_bearing_deg\n           ELSE MOD((p.grid_bearing_deg + 180.0)::numeric, 360.0)::float8\n         END                                                 AS axis_drawn_deg,\n         -- Anchor the pair INSIDE the array footprint, nudged a quarter of the way\n         -- out toward one flank so it does not sit exactly on the centre turbine.\n         -- Keeping it inside is what lets the map fit to the TURBINES layer alone and\n         -- still frame both arrows -- verified for every wind bearing, both plants.\n         -- p is joined here, NOT read with a scalar subquery: `(SELECT ... FROM p)`\n         -- raised \"more than one row returned by a subquery\" the moment $plant\n         -- matched more than one plant.\n         ST_Project(p.center_location, e.across_m * 0.25,\n                    RADIANS(p.grid_bearing_deg + 90.0))       AS anchor\n    FROM p\n    JOIN e ON e.plant_id = p.plant_id\n    -- LEFT so the layout axis still draws on a plant with no usable wind reading.\n    LEFT JOIN w ON w.plant_id = p.plant_id\n)\n-- THE PLANT'S LAYOUT AXIS, in light grey. The blue wind arrow springs from this\n-- arrow's TIP, so the angle between the two shafts IS the misalignment between the\n-- array and the wind now blowing over it.\nSELECT s.seq                                     AS point_seq,\n       a.plant_name,\n       ST_Y(g.pt::geometry)                      AS latitude,\n       ST_X(g.pt::geometry)                      AS longitude,\n       ROUND(a.grid_bearing_deg::numeric, 0)     AS grid_bearing_deg,\n       ROUND(a.axis_drawn_deg::numeric, 0)       AS axis_drawn_deg,\n       ROUND((a.along_m * 0.80)::numeric, 0)     AS axis_len_m\n  FROM a\n  -- TWO points, so Grafana draws exactly ONE arrowhead. It draws one per SEGMENT, so\n  -- a three-point route grows a second head halfway down its own shaft.\n  -- No MOD on the azimuth: ST_Project is periodic in it, and MOD(double precision,\n  -- numeric) has no overload anyway.\n  CROSS JOIN LATERAL (VALUES (1), (2)) s(seq)\n  CROSS JOIN LATERAL (\n    SELECT CASE s.seq\n             WHEN 1 THEN ST_Project(a.anchor, a.along_m * 0.40,\n                                    RADIANS(a.axis_drawn_deg + 180.0))\n             ELSE        ST_Project(a.anchor, a.along_m * 0.40,\n                                    RADIANS(a.axis_drawn_deg))\n           END AS pt\n  ) g\n ORDER BY a.plant_name, s.seq;"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "format": "table",
+     "rawQuery": true,
+     "rawSql": "WITH p AS (\n  SELECT plant_id, plant_name, center_location, grid_bearing_deg\n    FROM plants\n   WHERE plant_id = NULLIF('$plant','')::uuid\n),\n-- Decompose each turbine's offset from the plant centre into components ALONG and\n-- ACROSS the grid axis. A plain radius will not do: the array is deliberately\n-- elongated (rows 8 rotor diameters apart downwind, columns 5 across, odd rows\n  -- staggered half a spacing).\ne AS (\n  SELECT p.plant_id,\n         COALESCE(MAX(ABS(ST_Distance(p.center_location, t.location)\n                     * COS(ST_Azimuth(p.center_location, t.location)\n                           - RADIANS(p.grid_bearing_deg)))), 400.0) AS along_m,\n         COALESCE(MAX(ABS(ST_Distance(p.center_location, t.location)\n                     * SIN(ST_Azimuth(p.center_location, t.location)\n                           - RADIANS(p.grid_bearing_deg)))), 400.0) AS across_m\n    FROM p\n    LEFT JOIN turbines t\n           ON t.plant_id = p.plant_id\n          -- ST_Azimuth is undefined for coincident points and returns NULL, which\n          -- would propagate through COS/SIN/MAX and erase the overlay.\n          AND ST_Distance(p.center_location, t.location) > 0\n   GROUP BY p.plant_id\n),\nw AS (\n  SELECT h.plant_id,\n         SUM(h.dir_sin_sum)                                                 AS dir_sin_sum,\n         SUM(h.dir_cos_sum)                                                 AS dir_cos_sum,\n         SUM(h.readings)                                                    AS readings,\n         SUM(h.avg_free_wind_ms * h.readings) / NULLIF(SUM(h.readings), 0)   AS wind_ms\n    FROM cagg_wind_hourly h\n   -- A 3-hour trailing window rather than the single latest bucket: turbines\n   -- commissioned by 12_acid_expand_plant.sql lag the fleet by one bucket, and\n   -- pinning to MAX(bucket) drops them from the average.\n   WHERE h.bucket > (SELECT MAX(bucket) FROM cagg_wind_hourly\n              WHERE bucket <= $__timeTo()::timestamptz) - INTERVAL '3 hours'\n     AND h.plant_id = NULLIF('$plant','')::uuid\n   GROUP BY h.plant_id\n  -- Suppress the wind arrow when the plant's wind boxed the compass: the resultant\n  -- collapses and ATAN2(0,0) would return a confident due north.\n  HAVING SQRT(SUM(h.dir_sin_sum)^2 + SUM(h.dir_cos_sum)^2) >= 0.01 * SUM(h.readings)\n),\na AS (\n  SELECT p.plant_id,\n         p.plant_name,\n         p.grid_bearing_deg,\n         e.along_m,\n         w.wind_ms, w.dir_sin_sum, w.dir_cos_sum, w.readings,\n         MOD((DEGREES(ATAN2(w.dir_sin_sum, w.dir_cos_sum)) + 540.0)::numeric,\n             360.0)::float8                                  AS wind_toward_deg,\n         -- WHICH WAY TO DRAW THE GREY ARROW. A grid axis is a LINE, not a heading:\n         -- rows spaced along 290 degrees are equally spaced along 110. Drawing it\n         -- always at grid_bearing_deg meant that when the wind ran the other way down\n         -- the same axis, the blue arrow doubled back over the grey one and the angle\n         -- was unreadable. Pick the sense that faces the wind; with no wind reading,\n         -- fall back to grid_bearing_deg unchanged.\n         CASE\n           WHEN w.dir_sin_sum IS NULL THEN p.grid_bearing_deg\n           WHEN LEAST(ABS(MOD((DEGREES(ATAN2(w.dir_sin_sum, w.dir_cos_sum)) + 540.0)::numeric,\n                              360.0)::float8 - p.grid_bearing_deg),\n                      360.0 - ABS(MOD((DEGREES(ATAN2(w.dir_sin_sum, w.dir_cos_sum)) + 540.0)::numeric,\n                                      360.0)::float8 - p.grid_bearing_deg)) <= 90.0\n             THEN p.grid_bearing_deg\n           ELSE MOD((p.grid_bearing_deg + 180.0)::numeric, 360.0)::float8\n         END                                                 AS axis_drawn_deg,\n         -- Anchor the pair INSIDE the array footprint, nudged a quarter of the way\n         -- out toward one flank so it does not sit exactly on the centre turbine.\n         -- Keeping it inside is what lets the map fit to the TURBINES layer alone and\n         -- still frame both arrows -- verified for every wind bearing, both plants.\n         -- p is joined here, NOT read with a scalar subquery: `(SELECT ... FROM p)`\n         -- raised \"more than one row returned by a subquery\" the moment $plant\n         -- matched more than one plant.\n         ST_Project(p.center_location, e.across_m * 0.25,\n                    RADIANS(p.grid_bearing_deg + 90.0))       AS anchor\n    FROM p\n    JOIN e ON e.plant_id = p.plant_id\n    -- LEFT so the layout axis still draws on a plant with no usable wind reading.\n    LEFT JOIN w ON w.plant_id = p.plant_id\n)\n-- THE WIND OVER THIS PLANT, in blue: ONE arrow springing from the tip of the grey\n-- layout arrow. The angle between the shafts is how far the wind has swung off the\n-- axis the array was built for.\nSELECT s.seq                                     AS point_seq,\n       a.plant_name,\n       ST_Y(g.pt::geometry)                      AS latitude,\n       ST_X(g.pt::geometry)                      AS longitude,\n       ROUND(a.wind_ms::numeric, 1)              AS wind_ms,\n       ROUND(MOD((DEGREES(ATAN2(a.dir_sin_sum, a.dir_cos_sum)) + 360.0)::numeric,\n                 360.0), 0)                      AS wind_from_deg,\n       ROUND(a.wind_toward_deg::numeric, 0)      AS wind_toward_deg,\n       ROUND(a.grid_bearing_deg::numeric, 0)     AS grid_bearing_deg,\n       ROUND(a.axis_drawn_deg::numeric, 0)       AS axis_drawn_deg,\n       -- The angle you actually SEE between the two shafts, which by construction is\n       -- also the misalignment against the grid axis: 0 = wind straight down the rows,\n       -- 90 = straight across them. Folded to 0-90 because the axis is a line.\n       ROUND(LEAST(ABS(a.wind_toward_deg - a.axis_drawn_deg),\n                   360.0 - ABS(a.wind_toward_deg - a.axis_drawn_deg))::numeric,\n             1)                                  AS misalignment_deg,\n       ROUND((SQRT(a.dir_sin_sum^2 + a.dir_cos_sum^2)\n              / NULLIF(a.readings, 0))::numeric, 2) AS steadiness,\n       -- Length is a BOUNDED indicator of speed, not a strictly proportional one:\n       -- 0.30 to 0.55 of the array length as wind runs 0 to 25 m/s. That is a\n       -- deliberate trade. This panel exists to show the ANGLE, which needs the two\n       -- shafts to stay comparable in length and inside the fitted extent; a strictly\n       -- proportional arrow over a 12x speed range cannot do both. Exact speed is in\n       -- `wind_ms` here and on the wind timeline below.\n       ROUND((a.along_m * (0.30 + 0.25 * LEAST(a.wind_ms, 25.0) / 25.0))::numeric, 0)\n                                                 AS len_m\n  FROM a\n  CROSS JOIN LATERAL (VALUES (1), (2)) s(seq)\n  CROSS JOIN LATERAL (\n    SELECT CASE s.seq\n             -- Start a short way PAST the grey arrow's tip: the small gap keeps the\n             -- shafts from overlapping while holding their vertex in one place, which\n             -- is what makes the angle legible.\n             WHEN 1 THEN ST_Project(\n                           ST_Project(a.anchor, a.along_m * 0.40,\n                                      RADIANS(a.axis_drawn_deg)),\n                           a.along_m * 0.06, RADIANS(a.axis_drawn_deg))\n             ELSE        ST_Project(\n                           ST_Project(\n                             ST_Project(a.anchor, a.along_m * 0.40,\n                                        RADIANS(a.axis_drawn_deg)),\n                             a.along_m * 0.06, RADIANS(a.axis_drawn_deg)),\n                           a.along_m * (0.30 + 0.25 * LEAST(a.wind_ms, 25.0) / 25.0),\n                           RADIANS(a.wind_toward_deg))\n           END AS pt\n  ) g\n -- No wind reading means no arrow at all, rather than a zero-length stub.\n WHERE a.wind_toward_deg IS NOT NULL\n ORDER BY a.plant_name, s.seq;"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "organize",
+     "options": {}
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "table",
+   "title": "Turbine detail — as of window end",
+   "description": "Per-turbine metrics with grid position and the fault answer key alongside. Sort by performance_ratio_pct to rank suspects, then check active_fault to see whether the ranking was right.\n\nNote how grid_row correlates with wake_loss_pct but NOT with performance_ratio_pct — wake is a property of position, degradation is a property of the machine. Separating the two is the point of storing both.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 14,
+    "w": 11,
+    "x": 13,
+    "y": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "filterable": true
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "turbine"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Turbine detail (30-day history) →",
+          "url": "/d/wind-turbine/wind-4-turbine?var-plant=${__data.fields.plant_id}&var-turbine=${__data.fields.turbine_id}&${__url_time_range}",
+          "targetBlank": false
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 180
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "performance_ratio_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "gradient"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "red",
+           "value": null
+          },
+          {
+           "color": "orange",
+           "value": 90
+          },
+          {
+           "color": "yellow",
+           "value": 96
+          },
+          {
+           "color": "green",
+           "value": 98.5
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "capacity_factor_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "gauge",
+         "mode": "gradient"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 60
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "continuous-GrYlRd"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "wake_loss_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "status"
+      },
+      "properties": [
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background"
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "dark-red"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "power_kw"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "kwatt"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "expected_kw"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "kwatt"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "turbine_id"
+      },
+      "properties": [
+       {
+        "id": "custom.hidden",
+        "value": true
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "plant_id"
+      },
+      "properties": [
+       {
+        "id": "custom.hidden",
+        "value": true
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "sortBy": [
+     {
+      "displayName": "performance_ratio_pct",
+      "desc": false
+     }
+    ]
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT t.name                                     AS turbine,\n       t.turbine_id::text                            AS turbine_id,\n       t.plant_id::text                              AS plant_id,\n       t.grid_row, t.grid_col,\n       ROUND(h.avg_power_kw::numeric,0)              AS power_kw,\n       ROUND(h.avg_expected_power_kw::numeric,0)     AS expected_kw,\n       ROUND(h.performance_ratio_pct::numeric,1)     AS performance_ratio_pct,\n       ROUND(h.capacity_factor_pct::numeric,1)       AS capacity_factor_pct,\n       ROUND(h.avg_wake_loss_pct::numeric,1)         AS wake_loss_pct,\n       COALESCE(af.fault_type, '—')                  AS active_fault,\n       CASE WHEN af.detected_at IS NULL AND af.fault_type IS NOT NULL\n              THEN 'UNDIAGNOSED' END                 AS status\n  FROM turbines t\n  JOIN v_turbine_hourly h ON h.turbine_id = t.turbine_id AND h.bucket = (SELECT MAX(bucket) FROM cagg_turbine_power_hourly\n              WHERE bucket <= $__timeTo()::timestamptz)\n  LEFT JOIN LATERAL (\n    SELECT f.fault_type, f.detected_at FROM turbine_faults f\n     WHERE f.turbine_id = t.turbine_id AND f.resolved_at IS NULL\n     ORDER BY f.severity DESC LIMIT 1) af ON true\n WHERE t.plant_id = NULLIF('$plant','')::uuid\n   AND t.turbine_id::text LIKE '$turbine'\n ORDER BY h.performance_ratio_pct;"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "Expected vs actual output  —  the gap IS the fault  (tier-selected)",
+   "description": "Two traces summed across the plant's turbines: what the measured wind should have produced, and what was produced. They sit on top of each other for a healthy plant, and the gap between them IS the degradation — gradual opening is soiling or blade wear, a step is a pitch fault or curtailment.\n\nTier-selected over the turbine daily aggregate, the turbine hourly aggregate and raw. Six UNION branches here rather than three, because each tier contributes both metrics — the gates still leave exactly two alive.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 9,
+    "w": 14,
+    "x": 0,
+    "y": 18
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "kwatt",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "expected (kW)"
+      },
+      "properties": [
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          8,
+          5
+         ]
+        }
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "actual (kW)"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "green"
+        }
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 18
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true,
+     "calcs": [
+      "mean"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "time_series",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "  -- One point per day or coarser: the daily rollup already has it.\n  SELECT day AS time,\n         'expected (kW)' AS metric,\n         ROUND((SUM(avg_expected_power_kw))::numeric, 1) AS value\n    FROM cagg_turbine_power_daily\n   WHERE $__timeFilter(day)\n       AND plant_id = NULLIF('$plant','')::uuid\n       AND turbine_id::text LIKE '$turbine'\n       AND $__interval_ms >= 86400000\n   GROUP BY day\n  UNION ALL\n  -- One point per day or coarser: the daily rollup already has it.\n  SELECT day AS time,\n         'actual (kW)' AS metric,\n         ROUND((SUM(avg_power_kw))::numeric, 1) AS value\n    FROM cagg_turbine_power_daily\n   WHERE $__timeFilter(day)\n       AND plant_id = NULLIF('$plant','')::uuid\n       AND turbine_id::text LIKE '$turbine'\n       AND $__interval_ms >= 86400000\n   GROUP BY day\n  UNION ALL\n  -- One point per hour or coarser: the hourly rollup is fine enough.\n  SELECT bucket AS time,\n         'expected (kW)' AS metric,\n         ROUND((SUM(avg_expected_power_kw))::numeric, 1) AS value\n    FROM cagg_turbine_power_hourly\n   WHERE $__timeFilter(bucket)\n       AND plant_id = NULLIF('$plant','')::uuid\n       AND turbine_id::text LIKE '$turbine'\n       AND $__interval_ms >= 3600000\n       AND $__interval_ms <  86400000\n   GROUP BY bucket\n  UNION ALL\n  -- One point per hour or coarser: the hourly rollup is fine enough.\n  SELECT bucket AS time,\n         'actual (kW)' AS metric,\n         ROUND((SUM(avg_power_kw))::numeric, 1) AS value\n    FROM cagg_turbine_power_hourly\n   WHERE $__timeFilter(bucket)\n       AND plant_id = NULLIF('$plant','')::uuid\n       AND turbine_id::text LIKE '$turbine'\n       AND $__interval_ms >= 3600000\n       AND $__interval_ms <  86400000\n   GROUP BY bucket\n  UNION ALL\n  -- Finer than an hour: only the raw samples carry more detail.\n  SELECT time_bucket('15 minutes', time) AS time,\n         'expected (kW)' AS metric,\n         ROUND((SUM(expected_power_kw))::numeric, 1) AS value\n    FROM power_generation\n   WHERE $__timeFilter(time)\n       AND plant_id = NULLIF('$plant','')::uuid\n       AND turbine_id::text LIKE '$turbine'\n       AND $__interval_ms <  3600000\n   GROUP BY time_bucket('15 minutes', time)\n  UNION ALL\n  -- Finer than an hour: only the raw samples carry more detail.\n  SELECT time_bucket('15 minutes', time) AS time,\n         'actual (kW)' AS metric,\n         ROUND((SUM(power_kw))::numeric, 1) AS value\n    FROM power_generation\n   WHERE $__timeFilter(time)\n       AND plant_id = NULLIF('$plant','')::uuid\n       AND turbine_id::text LIKE '$turbine'\n       AND $__interval_ms <  3600000\n   GROUP BY time_bucket('15 minutes', time)\n ORDER BY time;"
+    }
+   ],
+   "maxDataPoints": 100
+  },
+  {
+   "id": 9,
+   "type": "table",
+   "title": "Fault history for this plant  (the answer key)",
+   "description": "turbine_faults for the selected plant. `detected_at` deliberately lags `started_at` — a gradual fault runs for weeks before anyone notices, and closing that gap is what the monitoring is for. Rows with no detected date are still undiagnosed.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 9,
+    "w": 10,
+    "x": 14,
+    "y": 18
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "filterable": true
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "severity_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "derate_now_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "gradient"
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "continuous-YlRd"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "days_to_detect"
+      },
+      "properties": [
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "continuous-YlRd"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "notes"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 260
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "sortBy": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT t.name                                          AS turbine,\n       f.fault_type,\n       ROUND((f.severity*100)::numeric,1)                 AS severity_pct,\n       f.ramp_days,\n       ROUND(((1-turbine_health(t.turbine_id, $__timeTo()::timestamptz))*100)::numeric,1) AS derate_now_pct,\n       f.started_at,\n       f.detected_at,\n       CASE WHEN f.detected_at IS NULL THEN NULL\n            ELSE (f.detected_at::date - f.started_at::date) END        AS days_to_detect,\n       f.resolved_at,\n       f.notes\n  FROM turbine_faults f\n  JOIN turbines t ON t.turbine_id = f.turbine_id\n WHERE t.plant_id = NULLIF('$plant','')::uuid\n   AND t.turbine_id::text LIKE '$turbine'\n ORDER BY f.resolved_at NULLS FIRST, f.severity DESC;"
+    }
+   ]
+  }
+ ]
+}

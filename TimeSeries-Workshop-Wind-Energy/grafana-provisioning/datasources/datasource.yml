@@ -1,0 +1,38 @@
+apiVersion: 1
+
+# Points Grafana at your Tiger Cloud service.
+#
+# The ${VAR} references are expanded by Grafana at provisioning time from the
+# environment, which docker-compose.yml supplies via `env_file: .env`. Fill in
+# .env once and this file needs no edits.
+#
+# Two gotchas worth knowing:
+#   * `url` must be bare host:port. Including a postgres:// scheme produces
+#     "error parsing postgres url".
+#   * On first provision the `database` field occasionally does not take effect
+#     until you open the datasource and click Save & Test once.
+
+datasources:
+  - name: TigerData
+    # Grafana 10+ renamed the Postgres plugin from `postgres` to
+    # `grafana-postgresql-datasource`. Provisioning still ACCEPTS the old alias and
+    # silently normalises it — but dashboard JSON does not: a template variable
+    # declaring `type: postgres` fails to resolve its plugin, so its dropdown comes
+    # up EMPTY, every panel filtering on it gets LIKE '', and the whole dashboard
+    # reads "No Data" with no error anywhere. Use the real plugin id in both places.
+    type: grafana-postgresql-datasource
+    uid: tigerdata
+    url: ${PGHOST}:${PGPORT}
+    database: ${PGDATABASE}
+    user: ${PGUSER}
+    isDefault: true
+    editable: true
+    secureJsonData:
+      password: ${PGPASSWORD}
+    jsonData:
+      sslmode: ${PGSSLMODE}
+      postgresVersion: 1700
+      timescaledb: true
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
