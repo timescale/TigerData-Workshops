@@ -1,0 +1,67 @@
+# Grafana only.
+#
+# The database for this workshop is a Tiger Cloud service, not a container —
+# fill in your connection details in the REPO-ROOT .env (copy ../.env.example) and
+# both psql and Grafana read the same credentials.
+#
+#   docker compose --env-file ../.env up -d    then open http://localhost:3000  (admin / see .env)
+
+services:
+  grafana:
+    image: grafana/grafana:latest
+    # Named per workshop. The workshops are meant to be run ONE AT A TIME, so this
+    # is not about running them concurrently — it is that a container name is
+    # global to the daemon and is held even by a STOPPED container. Sharing one
+    # would make `up` fail with "container name already in use" when you move to
+    # the next workshop without a `docker compose down` first.
+    container_name: wind-workshop-grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    # Grafana expands ${VAR} inside provisioning files, so the datasource is wired
+    # straight from the root .env — no hand-editing of datasource.yml required.
+    #
+    # `env_file:` puts these in the CONTAINER. It does NOT feed the ${...}
+    # substitutions in this file, such as GRAFANA_PORT above — compose reads
+    # those from its own --env-file only. Verified: without --env-file the port
+    # falls back to the default below, which is why the documented command
+    # passes `--env-file ../.env`. The default means it also works without it.
+    env_file: ../.env
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      # The dashboards ship read-only geomap panels; allow anonymous viewing so
+      # a workshop room can follow along without each person logging in.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      # Provisioning: datasource + dashboard provider definitions.
+      - ./grafana-provisioning:/etc/grafana/provisioning:ro
+      # The dashboard JSON files. Deliberately NOT under /var/lib/grafana — that
+      # path is a named volume below, and nesting a bind mount inside a named
+      # volume is fragile (it can hang container start on Docker Desktop). Keep
+      # the two mount trees separate; dashboards.yml points here.
+      - ./grafana:/etc/grafana/dashboards:ro
+      # Region boundary polygons for the geomap overlay. Grafana's geomap can only
+      # read GeoJSON from a STATIC FILE under its public directory — there is no
+      # query-driven polygon layer — so the region boundaries are exported from
+      # PostGIS once (step 04 has the query) and mounted here.
+      - ./grafana-geojson:/usr/share/grafana/public/maps/workshop:ro
+      # Custom marker symbols. Same constraint as the GeoJSON: the geomap resolves
+      # `symbol` paths relative to Grafana's public directory, so a custom glyph has
+      # to live inside it. Referenced as `img/icons/workshop/wind-arrow.svg`.
+      # Not used by the shipped dashboards any more — the wind arrows are route
+      # layers, which need no asset. Kept because GRAFANA_PLATFORM.md documents
+      # the rotated-marker alternative, which does need it.
+      - ./grafana-icons:/usr/share/grafana/public/img/icons/workshop:ro
+      # Grafana's own state, so preferences survive `docker compose down`. No need to
+    # name this per workshop: compose prefixes named volumes with the project
+    # (directory) name, so each workshop gets its own `<project>_grafana-data`.
+      - grafana-data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  grafana-data:

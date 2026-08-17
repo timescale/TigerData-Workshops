@@ -1,0 +1,990 @@
+{
+ "title": "Wind — 1. Global Fleet",
+ "uid": "wind-global",
+ "timezone": "browser",
+ "schemaVersion": 38,
+ "refresh": "1m",
+ "tags": [
+  "postgis-workshop",
+  "wind",
+  "tier-global"
+ ],
+ "time": {
+  "from": "now-7d",
+  "to": "now"
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "region",
+    "label": "Region",
+    "type": "query",
+    "datasource": {
+     "type": "grafana-postgresql-datasource",
+     "uid": "tigerdata"
+    },
+    "query": {
+     "refId": "region-variable-query",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "rawSql": "SELECT region_name FROM regions ORDER BY region_name"
+    },
+    "refresh": 1,
+    "sort": 1,
+    "includeAll": true,
+    "multi": false,
+    "current": {
+     "selected": true,
+     "text": "All",
+     "value": "$__all"
+    },
+    "options": [
+     {
+      "selected": true,
+      "text": "All",
+      "value": "$__all"
+     }
+    ],
+    "allValue": "%"
+   }
+  ]
+ },
+ "links": [
+  {
+   "title": "Region view",
+   "type": "link",
+   "url": "/d/wind-region",
+   "icon": "external link"
+  },
+  {
+   "title": "Plant view",
+   "type": "link",
+   "url": "/d/wind-plant",
+   "icon": "external link"
+  }
+ ],
+ "panels": [
+  {
+   "id": 1,
+   "type": "stat",
+   "title": "Fleet Output",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 0,
+    "y": 0
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 2,
+     "unit": "megwatt",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "green"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT SUM(region_power_kw)/1000.0 AS \"MW\"\n  FROM v_region_hourly\n WHERE bucket = (SELECT MAX(bucket) FROM cagg_regional_power_hourly\n              WHERE bucket <= $__timeTo()::timestamptz)\n   AND ('$region' = '%' OR region_name = '$region');"
+    }
+   ],
+   "description": "Reads the REGION tier (cagg_regional_power_hourly) — six rows an hour whatever the fleet size."
+  },
+  {
+   "id": 2,
+   "type": "stat",
+   "title": "Capacity Factor",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 6,
+    "y": 0
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 1,
+     "unit": "percent",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 20
+       },
+       {
+        "color": "green",
+        "value": 32
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT 100.0*SUM(region_power_kw)/NULLIF(SUM(region_rated_kw),0) AS \"CF\"\n  FROM v_region_hourly\n WHERE bucket = (SELECT MAX(bucket) FROM cagg_regional_power_hourly\n              WHERE bucket <= $__timeTo()::timestamptz)\n   AND ('$region' = '%' OR region_name = '$region');"
+    }
+   ],
+   "description": "Output over rated capacity. Tells you how windy it is — NOT whether the machines are healthy."
+  },
+  {
+   "id": 3,
+   "type": "stat",
+   "title": "Performance Ratio",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 12,
+    "y": 0
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 1,
+     "unit": "percent",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 90
+       },
+       {
+        "color": "yellow",
+        "value": 96
+       },
+       {
+        "color": "green",
+        "value": 98.5
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT 100.0*SUM(region_power_kw)/NULLIF(SUM(region_expected_power_kw),0) AS \"PR\"\n  FROM v_region_hourly\n WHERE bucket = (SELECT MAX(bucket) FROM cagg_regional_power_hourly\n              WHERE bucket <= $__timeTo()::timestamptz)\n   AND ('$region' = '%' OR region_name = '$region');"
+    }
+   ],
+   "description": "Actual output over what the MEASURED WIND should have produced. 100% = every machine healthy. This is the number that finds degradation; capacity factor cannot."
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "Turbines Underperforming",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 18,
+    "y": 0
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 0,
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "red"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT COUNT(*) AS \"Turbines\"\n  FROM (SELECT c.turbine_id,\n               SUM(c.avg_power_kw) / NULLIF(SUM(c.avg_expected_power_kw),0) AS pr\n          FROM cagg_turbine_power_hourly c\n         WHERE $__timeFilter(c.bucket)\n           AND ('$region' = '%' OR c.region_name = '$region')\n         GROUP BY c.turbine_id) x\n WHERE x.pr < 0.95;"
+    }
+   ],
+   "description": "Turbines whose 24-hour performance ratio is below 95%. Detected statistically from telemetry — turbine_faults holds the answer key, and nothing here consults it."
+  },
+  {
+   "id": 5,
+   "type": "geomap",
+   "title": "Worldwide production by region",
+   "description": "Region footprints are the CONVEX HULL of each region's turbines buffered 60 km — the actual operating territory, not a bounding box. Markers sit at each region's asset centroid, sized by output and coloured by performance ratio, so a degrading region turns orange even while producing well.\n\nGrafana's geomap has no query-driven polygon layer, so the footprints come from a static GeoJSON file exported by step 04. The live production values ride on the marker layer.\n\nClick a row in the table below to drill into a region.\n\nFIXED world view on purpose — this is the fleet overview and it should look the same every time you land on it, not reframe itself as you change the region filter. `id: zero` is Grafana's fixed-coordinate view (lat/lon/zoom); `noRepeat` stops the basemap tiling horizontally at low zoom.\n\nMAP VIEW: fixed world view via `{id: 'coords', lat: 25, lon: 10, zoom: 1.4}` — NOT\n'fit', because this panel should always show the whole fleet regardless of which regions\nhappen to have data in the window.\n\n'coords' is load-bearing and 'zero' is the trap. GeomapPanel gates on `if (v.lat == null)`\nagainst the CENTRE REGISTRY entry, not the panel config; the 'zero' entry declares\n`lat: 0, lon: 0`, so that test is false and the code falls through to\n`coord = [v.lon ?? 0, v.lat ?? 0]` — the registry's zeroes. A panel saved as\n`{id: 'zero', lat: 25, lon: 10}` therefore centres on 0N 0E and silently discards the\ncoordinates. Only the 'coords' entry leaves lat/lon undefined, which is what lets the\n`MapCenterID.Coordinates` branch read `config.lat` / `config.lon`.\n\n`zoom` is applied here only because the id is not 'fit'; on a 'fit' panel it would be\nconsumed as the fit CAP instead (`const maxZoom = config.zoom ?? config.maxZoom`), which\nis why the fit panels set `maxZoom` and carry no `zoom` key at all.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 13,
+    "w": 15,
+    "x": 0,
+    "y": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "decimals": 2,
+     "color": {
+      "mode": "continuous-RdYlGr"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "latitude"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "none"
+       },
+       {
+        "id": "decimals",
+        "value": 4
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "longitude"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "none"
+       },
+       {
+        "id": "decimals",
+        "value": 4
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "output_mw"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "megwatt"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "performance_ratio_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "capacity_factor_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "plants"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "short"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "turbines"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "short"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "view": {
+     "id": "coords",
+     "lat": 25,
+     "lon": 10,
+     "zoom": 1.4,
+     "noRepeat": true
+    },
+    "basemap": {
+     "type": "default",
+     "name": "Basemap"
+    },
+    "controls": {
+     "showZoom": true,
+     "showAttribution": true,
+     "showScale": false
+    },
+    "tooltip": {
+     "mode": "details"
+    },
+    "layers": [
+     {
+      "type": "geojson",
+      "name": "Region footprints",
+      "tooltip": false,
+      "config": {
+       "src": "public/maps/workshop/wind-regions.geojson",
+       "rules": [],
+       "style": {
+        "color": {
+         "fixed": "semi-dark-blue"
+        },
+        "opacity": 0.1,
+        "lineWidth": 1.5,
+        "size": {
+         "fixed": 3
+        },
+        "symbol": {
+         "mode": "fixed",
+         "fixed": "img/icons/marker/circle.svg"
+        }
+       }
+      }
+     },
+     {
+      "type": "markers",
+      "name": "Regions",
+      "tooltip": true,
+      "location": {
+       "mode": "coords",
+       "latitude": "latitude",
+       "longitude": "longitude"
+      },
+      "config": {
+       "style": {
+        "size": {
+         "field": "output_mw",
+         "fixed": 8,
+         "min": 8,
+         "max": 26
+        },
+        "color": {
+         "field": "performance_ratio_pct",
+         "fixed": "green"
+        },
+        "opacity": 0.75,
+        "symbol": {
+         "mode": "fixed",
+         "fixed": "img/icons/marker/circle.svg"
+        }
+       },
+       "showLegend": true
+      }
+     }
+    ]
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT r.region_name,\n       r.country,\n       ST_Y(ST_Centroid(ST_Collect(t.location::geometry))) AS latitude,\n       ST_X(ST_Centroid(ST_Collect(t.location::geometry))) AS longitude,\n       ROUND((MAX(h.region_power_kw)/1000.0)::numeric,2)   AS output_mw,\n       ROUND(MAX(h.performance_ratio_pct)::numeric,1)      AS performance_ratio_pct,\n       ROUND(MAX(h.capacity_factor_pct)::numeric,1)        AS capacity_factor_pct,\n       COUNT(DISTINCT p.plant_id)                          AS plants,\n       COUNT(t.turbine_id)                                 AS turbines\n  FROM regions r\n  JOIN plants   p ON p.region_name = r.region_name\n  JOIN turbines t ON t.plant_id    = p.plant_id\n  JOIN v_region_hourly h ON h.region_name = r.region_name AND h.bucket = (SELECT MAX(bucket) FROM cagg_regional_power_hourly\n              WHERE bucket <= $__timeTo()::timestamptz)\n WHERE ('$region' = '%' OR r.region_name = '$region')\n GROUP BY r.region_name, r.country\n ORDER BY output_mw DESC;"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "table",
+   "title": "Region metrics — as of window end  (click to drill in)",
+   "description": "Current-hour metrics per region, read from the region tier. The region_name cell links through to the region dashboard, carrying the time range with it.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 13,
+    "w": 9,
+    "x": 15,
+    "y": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "filterable": true
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "region_name"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Drill into region →",
+          "url": "/d/wind-region/wind-2-region?var-region=${__data.fields.region_name}&${__url_time_range}",
+          "targetBlank": false
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 190
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "performance_ratio_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "gradient"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "red",
+           "value": null
+          },
+          {
+           "color": "orange",
+           "value": 90
+          },
+          {
+           "color": "yellow",
+           "value": 96
+          },
+          {
+           "color": "green",
+           "value": 98.5
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "capacity_factor_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "gauge",
+         "mode": "gradient"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "max",
+        "value": 60
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "continuous-GrYlRd"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "wake_loss_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "output_mw"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "megwatt"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "lost_mw"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "megwatt"
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "continuous-YlRd"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "sortBy": [
+     {
+      "displayName": "output_mw",
+      "desc": true
+     }
+    ]
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "table",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "SELECT h.region_name,\n       ROUND((h.region_power_kw/1000.0)::numeric,2)  AS output_mw,\n       ROUND(h.capacity_factor_pct::numeric,1)       AS capacity_factor_pct,\n       ROUND(h.performance_ratio_pct::numeric,1)     AS performance_ratio_pct,\n       ROUND(h.avg_wake_loss_pct::numeric,1)         AS wake_loss_pct,\n       ROUND(h.avg_wind_ms::numeric,1)               AS wind_ms,\n       h.plants_reporting                            AS plants,\n       h.turbines_reporting                          AS turbines,\n       ROUND((h.lost_kw/1000.0)::numeric,2)          AS lost_mw\n  FROM v_region_hourly h\n WHERE h.bucket = (SELECT MAX(bucket) FROM cagg_regional_power_hourly\n              WHERE bucket <= $__timeTo()::timestamptz)\n   AND ('$region' = '%' OR h.region_name = '$region')\n ORDER BY output_mw DESC;"
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "timeseries",
+   "title": "Production timeline by region  (tier-selected)",
+   "description": "The fleet production curve, stacked by region, and the first of the zoom-selected timelines. One query, three sources: the region DAILY aggregate when a plotted point spans a day or more, the region HOURLY aggregate down to an hour, and raw `power_generation` below that. The $__interval_ms gates are constants at plan time, so PostgreSQL drops the two untaken branches out of the plan rather than reading and discarding them. Cost is therefore flat across zoom levels instead of growing with the window — see TIGER_PLATFORM.md for the general form.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 9,
+    "w": 24,
+    "x": 0,
+    "y": 17
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "megwatt",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 25,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "showLegend": true,
+     "calcs": [
+      "mean",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "time_series",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "  -- One point per day or coarser: the daily rollup already has it.\n  SELECT region_name AS metric,\n         day AS time,\n         ROUND((AVG(region_power_kw)/1000.0)::numeric, 2) AS value\n    FROM cagg_regional_power_daily\n   WHERE $__timeFilter(day)\n       AND ('$region' = '%' OR region_name = '$region')\n       AND $__interval_ms >= 86400000\n   GROUP BY region_name, day\n  UNION ALL\n  -- One point per hour or coarser: the hourly rollup is fine enough.\n  SELECT region_name AS metric,\n         bucket AS time,\n         ROUND((AVG(region_power_kw)/1000.0)::numeric, 2) AS value\n    FROM cagg_regional_power_hourly\n   WHERE $__timeFilter(bucket)\n       AND ('$region' = '%' OR region_name = '$region')\n       AND $__interval_ms >= 3600000\n       AND $__interval_ms <  86400000\n   GROUP BY region_name, bucket\n  UNION ALL\n  -- Finer than an hour: only the raw samples carry more detail.\n  SELECT region_name AS metric,\n         time_bucket('15 minutes', time) AS time,\n         ROUND((SUM(power_kw)/1000.0)::numeric, 2) AS value\n    FROM power_generation\n   WHERE $__timeFilter(time)\n       AND ('$region' = '%' OR region_name = '$region')\n       AND $__interval_ms <  3600000\n   GROUP BY region_name, time_bucket('15 minutes', time)\n ORDER BY time;"
+    }
+   ],
+   "maxDataPoints": 100
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "Fleet performance ratio  (tier-selected)",
+   "description": "Performance ratio per region over time — actual output over what the measured wind should have produced, so weather is already divided out. A step down is a fault appearing; a slow slide is soiling or erosion. Tier-selected, and note the metric is a RATIO OF SUMS at every tier, which is what lets it stay correct when the aggregates roll up.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 24,
+    "x": 0,
+    "y": 26
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true,
+     "calcs": [
+      "mean",
+      "min"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "time_series",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "  -- One point per day or coarser: the daily rollup already has it.\n  SELECT region_name AS metric,\n         day AS time,\n         ROUND((100.0 * SUM(region_power_kw) / NULLIF(SUM(region_expected_power_kw),0))::numeric, 2) AS value\n    FROM cagg_regional_power_daily\n   WHERE $__timeFilter(day)\n       AND ('$region' = '%' OR region_name = '$region')\n       AND $__interval_ms >= 86400000\n   GROUP BY region_name, day\n  UNION ALL\n  -- One point per hour or coarser: the hourly rollup is fine enough.\n  SELECT region_name AS metric,\n         bucket AS time,\n         ROUND((100.0 * SUM(region_power_kw) / NULLIF(SUM(region_expected_power_kw),0))::numeric, 2) AS value\n    FROM cagg_regional_power_hourly\n   WHERE $__timeFilter(bucket)\n       AND ('$region' = '%' OR region_name = '$region')\n       AND $__interval_ms >= 3600000\n       AND $__interval_ms <  86400000\n   GROUP BY region_name, bucket\n  UNION ALL\n  -- Finer than an hour: only the raw samples carry more detail.\n  SELECT region_name AS metric,\n         time_bucket('15 minutes', time) AS time,\n         ROUND((100.0 * SUM(power_kw) / NULLIF(SUM(expected_power_kw),0))::numeric, 2) AS value\n    FROM power_generation\n   WHERE $__timeFilter(time)\n       AND ('$region' = '%' OR region_name = '$region')\n       AND $__interval_ms <  3600000\n   GROUP BY region_name, time_bucket('15 minutes', time)\n ORDER BY time;"
+    }
+   ],
+   "maxDataPoints": 100
+  },
+  {
+   "id": 9,
+   "type": "timeseries",
+   "title": "Seasonal wind resource by region  (tier-selected)",
+   "description": "Six regions, six different annual cycles — the payoff of loading two years. The North Sea and North German Plain peak in JANUARY with the Atlantic storm track; the Southern Great Plains and Inner Mongolia peak in SPRING with their low-level jets; the Deccan Plateau peaks in JULY with the southwest monsoon, in full antiphase with Europe and swinging about 3.5x between dry season and monsoon.\n\nTier-selected. The weather aggregates are TURBINE grain, so the rollup to region happens in this query — weighted by `readings`, because an unweighted average would let a partial bucket count as much as a full one.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 9,
+    "w": 24,
+    "x": 0,
+    "y": 34
+   },
+   "maxDataPoints": 100,
+   "fieldConfig": {
+    "defaults": {
+     "unit": "velocityms",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": true
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "showLegend": true,
+     "calcs": [
+      "mean",
+      "min",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "time_series",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "  -- One point per day or coarser: the daily rollup already has it.\n  SELECT p.region_name AS metric,\n         w.day AS time,\n         ROUND((SUM(w.avg_free_wind_ms * w.readings) / NULLIF(SUM(w.readings), 0))::numeric, 2) AS value\n    FROM cagg_wind_daily w\n    JOIN plants p ON p.plant_id = w.plant_id\n   WHERE $__timeFilter(w.day)\n       AND ('$region' = '%' OR p.region_name = '$region')\n       AND $__interval_ms >= 86400000\n   GROUP BY p.region_name, w.day\n  UNION ALL\n  -- One point per hour or coarser: the hourly rollup is fine enough.\n  SELECT p.region_name AS metric,\n         w.bucket AS time,\n         ROUND((SUM(w.avg_free_wind_ms * w.readings) / NULLIF(SUM(w.readings), 0))::numeric, 2) AS value\n    FROM cagg_wind_hourly w\n    JOIN plants p ON p.plant_id = w.plant_id\n   WHERE $__timeFilter(w.bucket)\n       AND ('$region' = '%' OR p.region_name = '$region')\n       AND $__interval_ms >= 3600000\n       AND $__interval_ms <  86400000\n   GROUP BY p.region_name, w.bucket\n  UNION ALL\n  -- Finer than an hour: only the raw samples carry more detail.\n  SELECT p.region_name AS metric,\n         time_bucket('15 minutes', m.time) AS time,\n         ROUND(AVG(m.free_wind_speed_ms)::numeric, 2) AS value\n    FROM wind_measurements m\n    JOIN plants p ON p.plant_id = m.plant_id\n   WHERE $__timeFilter(m.time)\n       AND ('$region' = '%' OR p.region_name = '$region')\n       AND $__interval_ms <  3600000\n   GROUP BY p.region_name, time_bucket('15 minutes', m.time)\n ORDER BY time;"
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "type": "timeseries",
+   "title": "Seasonal air temperature by region  (tier-selected)",
+   "description": "The same aggregates, the other measurement, and the regional character is starker. The North Sea barely moves — about 11 degC across the year, with its warmest point lagging to late August because water stores heat. Inner Mongolia swings over 40 degC. The Deccan Plateau peaks in APRIL and then COOLS through midsummer as the monsoon arrives, making it the one region whose windiest months are not its hottest. Temperature is not incidental: it sets air density, and power scales with density.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "tigerdata"
+   },
+   "gridPos": {
+    "h": 9,
+    "w": 24,
+    "x": 0,
+    "y": 43
+   },
+   "maxDataPoints": 100,
+   "fieldConfig": {
+    "defaults": {
+     "unit": "celsius",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 0,
+      "showPoints": "never",
+      "spanNulls": true
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "showLegend": true,
+     "calcs": [
+      "mean",
+      "min",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "format": "time_series",
+     "rawQuery": true,
+     "editorMode": "code",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "tigerdata"
+     },
+     "rawSql": "  -- One point per day or coarser: the daily rollup already has it.\n  SELECT p.region_name AS metric,\n         w.day AS time,\n         ROUND((SUM(w.avg_temp_c * w.readings) / NULLIF(SUM(w.readings), 0))::numeric, 2) AS value\n    FROM cagg_wind_daily w\n    JOIN plants p ON p.plant_id = w.plant_id\n   WHERE $__timeFilter(w.day)\n       AND ('$region' = '%' OR p.region_name = '$region')\n       AND $__interval_ms >= 86400000\n   GROUP BY p.region_name, w.day\n  UNION ALL\n  -- One point per hour or coarser: the hourly rollup is fine enough.\n  SELECT p.region_name AS metric,\n         w.bucket AS time,\n         ROUND((SUM(w.avg_temp_c * w.readings) / NULLIF(SUM(w.readings), 0))::numeric, 2) AS value\n    FROM cagg_wind_hourly w\n    JOIN plants p ON p.plant_id = w.plant_id\n   WHERE $__timeFilter(w.bucket)\n       AND ('$region' = '%' OR p.region_name = '$region')\n       AND $__interval_ms >= 3600000\n       AND $__interval_ms <  86400000\n   GROUP BY p.region_name, w.bucket\n  UNION ALL\n  -- Finer than an hour: only the raw samples carry more detail.\n  SELECT p.region_name AS metric,\n         time_bucket('15 minutes', m.time) AS time,\n         ROUND(AVG(m.temperature_c)::numeric, 2) AS value\n    FROM wind_measurements m\n    JOIN plants p ON p.plant_id = m.plant_id\n   WHERE $__timeFilter(m.time)\n       AND ('$region' = '%' OR p.region_name = '$region')\n       AND $__interval_ms <  3600000\n   GROUP BY p.region_name, time_bucket('15 minutes', m.time)\n ORDER BY time;"
+    }
+   ]
+  }
+ ]
+}

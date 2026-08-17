@@ -1,0 +1,20 @@
+apiVersion: 1
+
+# Auto-loads every .json in grafana/ (mounted at /etc/grafana/dashboards)
+# on startup, so all three dashboards exist the moment `docker compose up` finishes.
+#
+# The path is deliberately outside /var/lib/grafana: that directory is a named
+# volume in docker-compose.yml, and nesting a bind mount inside a named volume is
+# fragile — it can hang container start on Docker Desktop.
+
+providers:
+  - name: postgis-workshop
+    orgId: 1
+    folder: PostGIS Workshop
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

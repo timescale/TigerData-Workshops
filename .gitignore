@@ -15,3 +15,4 @@ Agentic-Postgres-Workshop/schema.sql
 BlockChain-Workshop/*.csv.gz
 TimeSeries-Workshop-Finance/tutorial_sample_*.csv
 TimeSeries-Workshop-Finance/crypto_sample.zip
+TimeSeries-Workshop-Wind-Energy/grafana-geojson/wind-regions.geojson
