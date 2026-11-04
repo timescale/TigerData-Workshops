@@ -1,10 +1,15 @@
 services:
   grafana:
     image: grafana/grafana:latest
+    # 127.0.0.1 = reachable from this machine only. A bare "3000:3000" listens on
+    # every interface, so anyone on the same Wi-Fi could reach Grafana and,
+    # through its datasource, your Tiger Cloud service.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      # Required, no default. Put GF_SECURITY_ADMIN_PASSWORD=<your choice> in a
+      # .env file next to this one; docker compose reads it automatically.
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?create .env next to docker-compose.yml containing GF_SECURITY_ADMIN_PASSWORD=<your choice>}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards

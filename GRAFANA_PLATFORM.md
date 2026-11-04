@@ -105,6 +105,70 @@ can resolve to empty instead of All — the same `LIKE ''` symptom from a differ
 `{"selected": true, "text": "All", "value": "$__all"}` and set `allValue` to something SQL-safe such
 as `%`.
 
+### A Grafana Viewer is not read-only against its datasource — lock the container down — `VERIFIED`
+
+**The failure mode is silent and inverts a reasonable assumption.** It is natural to read
+`GF_AUTH_ANONYMOUS_ENABLED=true` + `GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer` as "people can look but
+not touch". Against the *database*, that is false. The Viewer role hides Explore and the panel
+editors in the UI, but `POST /api/ds/query`, the endpoint every panel queries through, executes
+whatever SQL it is sent, using the datasource's own credentials. A provisioned datasource
+usually connects as the service owner, so any viewer, signed in or anonymous, can run arbitrary
+SQL as that role, writes and DDL included.
+
+Verified on **Grafana 13.1.3** (`grafana/grafana:latest`, 2026-11-04) against a throwaway
+`postgres:17` with anonymous Viewer enabled and no credentials sent:
+
+| Request (no auth) | Result |
+|---|---|
+| `GET /explore` | `302` to login. The UI is locked. |
+| `GET /api/admin/settings` | `403` |
+| `POST /api/ds/query` with `SELECT current_user` | `200`, returned the datasource's owner role |
+| `POST /api/ds/query` with `CREATE TABLE …; SELECT 1` | `200`, and the table **existed** in Postgres afterwards |
+
+To check any stack, send this with no `-u`:
+
+```bash
+curl -s -X POST http://127.0.0.1:3000/api/ds/query -H 'Content-Type: application/json' \
+  -d '{"queries":[{"refId":"A","datasource":{"uid":"<ds-uid>"},"rawSql":"SELECT current_user","format":"table"}],"from":"now-1h","to":"now"}'
+```
+
+Rows coming back means unauthenticated SQL access. So a containerised Grafana pointed at a real
+service needs all three of the following.
+
+1. **Publish on loopback: `"127.0.0.1:${GRAFANA_PORT:-3000}:3000"`.** A bare `"3000:3000"`
+   listens on every interface, so on shared Wi-Fi anyone can reach it. Verified: with the
+   `127.0.0.1` prefix, `lsof` showed only `127.0.0.1:<port>` listening and a request to the
+   host's LAN address got no connection. `docker compose config` renders it as
+   `host_ip: 127.0.0.1`. Docker documents that on Linux, published ports bypass ufw/firewalld
+   (Docker docs, *Packet filtering and firewalls*), so a host firewall is not a substitute.
+   `DOCUMENTED`, not tested here.
+2. **No anonymous access**, unless the datasource connects as a role whose grants you would
+   hand to anyone (`SELECT`-only on the tables the dashboards read). The Viewer role does not
+   provide that boundary; the database role has to.
+3. **A required admin password with no default:**
+   `GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?set it in .env}`. The `:?` form
+   makes compose refuse to start, naming the variable, when it is **unset or empty**. Both were
+   verified, so an unedited template line `GF_SECURITY_ADMIN_PASSWORD=` fails safe. A
+   placeholder such as `<choose-a-password>` would not: it would become a new well-known
+   password. Remember that `${…}` in the compose file comes from `--env-file`/the shell, not
+   from `env_file:`; see the entry below.
+
+**The admin password is applied only when Grafana first creates its database.** Verified: with
+a persistent `/var/lib/grafana` volume, changing `GF_SECURITY_ADMIN_PASSWORD` and running
+`up -d --force-recreate` left the *old* password working and the new one rejected. This also
+means existing installs keep a weak password after you fix the compose file. Two fixes, both
+verified to work:
+
+```bash
+docker exec <container> grafana cli admin reset-admin-password '<new>'   # old pw -> 401, new -> 200
+docker compose down -v                                                   # or start from scratch
+```
+
+When testing logins, use an admin-only endpoint such as `/api/admin/settings`. With anonymous
+access on, a request carrying a **wrong** password silently falls back to the anonymous
+session, so `GET /api/org -u admin:admin` returned `200` even though `admin` was not the
+password.
+
 ### Docker containers reach outbound by default; `ports:` is inbound only — `VERIFIED`
 
 Worth stating because it is a common wrong turn when a containerised Grafana cannot see a cloud
