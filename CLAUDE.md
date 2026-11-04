@@ -68,6 +68,11 @@ platform belongs in one of them, generalised so it outlives that workshop. See
    assuming a clean table.
 6. **Never commit credentials.** Connection strings go in `.env` (gitignored) or are pasted by
    the attendee. Committed config uses `${VAR}` interpolation or an obvious `<placeholder>`.
+   A shipped default password counts as a committed credential. Every Grafana stack therefore
+   publishes on `127.0.0.1` only, requires `GF_SECURITY_ADMIN_PASSWORD` via `${…:?}` with no
+   fallback, and does not enable anonymous access. Grafana can reach the attendee's service
+   as its owner role, and a Viewer can run arbitrary SQL through `/api/ds/query`. See
+   GRAFANA_PLATFORM.md.
 7. **Data generation lives in SQL. Full stop.** No Python, Node, Go or shell program may compute,
    synthesise, or transform a row that lands in a table — attendees have to be able to read the
    generator, and the generator being SQL is itself part of the lesson. Shell scripts are allowed

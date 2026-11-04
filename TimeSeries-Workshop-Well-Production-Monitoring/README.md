@@ -246,10 +246,15 @@ cd ~/well-dashboard
 services:
   grafana:
     image: grafana/grafana:latest
+    # 127.0.0.1 = reachable from this machine only. A bare "3000:3000" listens on
+    # every interface, so anyone on the same Wi-Fi could reach Grafana and,
+    # through its datasource, your Tiger Cloud service.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      # Required, no default. Put GF_SECURITY_ADMIN_PASSWORD=<your choice> in a
+      # .env file next to this one; docker compose reads it automatically.
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?create .env next to docker-compose.yml containing GF_SECURITY_ADMIN_PASSWORD=<your choice>}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
@@ -531,6 +536,16 @@ Paste the JSON below into this file:
 
 ## Running
 
+**Create a Grafana admin password** (once). There is no default: Grafana's admin can
+run any SQL against your service through the datasource, so a well-known password is a
+way into your database. This generates a random one; `docker compose` reads `.env`
+automatically, and `.env` is gitignored.
+```bash
+cd ~/well-dashboard
+[ -f .env ] || echo "GF_SECURITY_ADMIN_PASSWORD=$(openssl rand -base64 18)" > .env
+cat .env        # the password you will log in with
+```
+
 **Start**
 ```bash
 cd ~/well-dashboard
@@ -547,7 +562,12 @@ docker compose up -d
 ```
 http://localhost:3000
 ```
-Credentials: `admin` / `admin`
+Log in as `admin` with the password from your `.env`. Grafana listens on `127.0.0.1` only,
+so it is not reachable from other machines on your network.
+
+Grafana sets the admin password only when it first initialises. If you change it in `.env`
+later, run `docker compose down && docker compose up -d` to start fresh. This stack keeps
+no Grafana state worth saving; the dashboards are provisioned from files.
 
 The **Well Production Monitoring** dashboard is available immediately under **Dashboards**.
 
@@ -581,6 +601,7 @@ docker compose down
 | `error parsing postgres url` | `url` field contains a `postgres://` connection string | Set `url` to `host:port` only — no scheme or credentials |
 | `no default database configured` | Grafana provisioning doesn't persist the `database` field on first load | Open the datasource in the UI, set **Database** to `tsdb`, click **Save & Test** |
 | Panels show "No data" | Time range doesn't overlap with loaded data | Expand the time picker; data runs 90 days back from the load date |
+| `required variable GF_SECURITY_ADMIN_PASSWORD is missing a value` | No `.env` next to `docker-compose.yml` | Create it as shown under **Running** |
 
 
 ## License

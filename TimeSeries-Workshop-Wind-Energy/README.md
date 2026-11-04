@@ -123,15 +123,35 @@ for f in sql/*.sql; do echo "── $f"; psql -v ON_ERROR_STOP=1 -f "$f" || brea
 
 ### 3. Start Grafana
 
+First set `GF_SECURITY_ADMIN_PASSWORD` in the root `.env`. There is no default, on purpose:
+Grafana's admin can run any SQL against your service through the datasource, so a well-known
+password is a way into your database. `openssl rand -base64 18` makes a good one.
+
 ```bash
 docker compose --env-file ../.env up -d
-open http://localhost:3000          # admin / GF_SECURITY_ADMIN_PASSWORD from the root .env
+open http://localhost:3000          # log in as admin / GF_SECURITY_ADMIN_PASSWORD
 ```
 
-`--env-file ../.env` is what lets the root file set `GRAFANA_PORT`. Compose reads
-variables used *inside* a compose file from its own `--env-file`, not from the `env_file:` key —
+Grafana listens on `127.0.0.1` only, so it is not reachable from other machines on your
+network, and every page needs the admin login. There is no anonymous viewing. A Grafana
+*Viewer* is not read-only against the database: the endpoint every panel queries through runs
+whatever SQL it is sent, so a no-login viewer would have full access to your service.
+
+`--env-file ../.env` is required. Compose reads variables used *inside* a compose file, such
+as the password and `GRAFANA_PORT`, from its own `--env-file`, not from the `env_file:` key.
 `env_file:` supplies the container, which is what Grafana needs to interpolate `${PGHOST}` in
-`datasources/datasource.yml`. Without the flag it still starts, on the default port 3000.
+`datasources/datasource.yml`. Without the flag, compose refuses to start and says the
+password is missing.
+
+Grafana applies the admin password only when it **first** creates its database, which lives
+in the `grafana-data` volume. Changing it in `.env` later does nothing. To change it:
+
+```bash
+docker exec wind-workshop-grafana grafana cli admin reset-admin-password '<new-password>'
+```
+
+(or `docker compose down -v` to start Grafana from scratch). If you ran this workshop before
+this change, your Grafana still has the old `admin` password; reset it the same way.
 
 Grafana expands `${VAR}` inside provisioning files, so the datasource is wired from the
 root `.env` with no hand-editing. The dashboards in `grafana/` are provisioned automatically.
@@ -157,23 +177,36 @@ services:
     # would make `up` fail with "container name already in use" when you move to
     # the next workshop without a `docker compose down` first.
     container_name: wind-workshop-grafana
+    # Bound to 127.0.0.1, i.e. reachable from THIS machine only. A bare
+    # "3000:3000" listens on every interface, so anyone on the same workshop
+    # Wi-Fi could reach this Grafana — and through its datasource, your Tiger
+    # Cloud service as tsdbadmin. Docker also publishes ports ahead of the host
+    # firewall on Linux (ufw does not see them), so do not rely on a firewall.
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     # Grafana expands ${VAR} inside provisioning files, so the datasource is wired
     # straight from the root .env — no hand-editing of datasource.yml required.
     #
     # `env_file:` puts these in the CONTAINER. It does NOT feed the ${...}
     # substitutions in this file, such as GRAFANA_PORT above — compose reads
     # those from its own --env-file only. Verified: without --env-file the port
-    # falls back to the default below, which is why the documented command
-    # passes `--env-file ../.env`. The default means it also works without it.
+    # silently falls back to its default. The admin password below has no
+    # default, so without --env-file compose refuses to start at all.
     env_file: ../.env
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
-      # The dashboards ship read-only geomap panels; allow anonymous viewing so
-      # a workshop room can follow along without each person logging in.
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # REQUIRED, with no fallback: there is no shipped default password. Set
+      # GF_SECURITY_ADMIN_PASSWORD in the root .env. `docker compose` refuses to
+      # start without it — which also means you must pass `--env-file ../.env`,
+      # because compose reads ${...} here from --env-file, not from env_file:.
+      #
+      # Grafana applies this only when it FIRST creates its database. Changing it
+      # later has no effect on an existing grafana-data volume; see the README.
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?set GF_SECURITY_ADMIN_PASSWORD in the root .env, then run exactly - docker compose --env-file ../.env up -d}
+      #
+      # Anonymous access is deliberately OFF. A Viewer is NOT read-only against
+      # the database: Viewer hides Explore and the editors, but /api/ds/query —
+      # the endpoint every panel uses — runs whatever SQL it is sent. Tested on
+      # Grafana 13: an anonymous Viewer ran CREATE TABLE as tsdbadmin.
     volumes:
       # Provisioning: datasource + dashboard provider definitions.
       - ./grafana-provisioning:/etc/grafana/provisioning:ro
@@ -1337,6 +1370,10 @@ Confirm the values actually landed:
 ```bash
 docker exec wind-workshop-grafana sh -c 'echo $PGHOST/$PGDATABASE; echo "pw set? ${PGPASSWORD:+yes}"'
 ```
+
+The exception is `GF_SECURITY_ADMIN_PASSWORD`: recreating the container does not change it,
+because Grafana stores it in the `grafana-data` volume on first start. Use
+`grafana cli admin reset-admin-password` as described in *Start Grafana*.
 
 Also note `env_file` does **no** shell expansion and strips no quotes — `PGHOST="host"` arrives with
 the quotes included and the connection fails.

@@ -348,9 +348,29 @@ ok "  connected  : $SERVER_ID"
 # Project the volume from the values that will actually be in effect: the
 # flags where given, otherwise whatever is already in workshop_config, otherwise
 # the built-in defaults (workshop_config may not exist yet on a fresh database).
+#
+# Every value read back from the database is DATA and must stay data. Bash
+# evaluates a variable's contents inside $(( )) as an arithmetic EXPRESSION,
+# and an expression such as  a[$(some command)]  runs that command. So a
+# workshop_config row written by anyone with SQL access would otherwise execute
+# on this machine the next time the script ran. Accept positive whole numbers
+# only; anything else falls back to the default with a warning. 10# also stops
+# a leading zero ("08") being read as octal.
+uint_or() {  # uint_or <value> <fallback>
+  case "$1" in
+    ''|*[!0-9]*) printf '%s' "$2" ;;
+    *) [ "$(( 10#$1 ))" -ge 1 ] && printf '%d' "$(( 10#$1 ))" || printf '%s' "$2" ;;
+  esac
+}
 cfg_or() {  # cfg_or <key> <fallback>
   v="$(psql_val "SELECT value FROM workshop_config WHERE key='$1'" 2>/dev/null || true)"
-  [ -n "$v" ] && printf '%s' "$v" || printf '%s' "$2"
+  [ -z "$v" ] && { printf '%s' "$2"; return; }
+  r="$(uint_or "$v" "")"
+  if [ -z "$r" ]; then
+    warn "  workshop_config.$1 = '$v' is not a positive whole number; using $2" >&2
+    r="$2"
+  fi
+  printf '%s' "$r"
 }
 EFF_DAYS="${HISTORY_DAYS:-$(cfg_or backfill_days 730)}"
 EFF_PLANTS="${PLANTS:-$(cfg_or num_plants 6)}"
@@ -378,8 +398,9 @@ printf '  volume     : ~%s rows in EACH of two hypertables\n' \
 RAM_MB="$(psql_val "SELECT ROUND((pg_size_bytes(current_setting('shared_buffers'))
                                 + pg_size_bytes(current_setting('effective_cache_size')))
                                / 1048576.0)" 2>/dev/null || echo 0)"
-[ -z "$RAM_MB" ] && RAM_MB=0
+RAM_MB="$(uint_or "$RAM_MB" 0)"       # see uint_or: never let DB output reach $(( ))
 MPW="$(psql_val "SELECT current_setting('max_parallel_workers')" 2>/dev/null || echo 0)"
+MPW="$(uint_or "$MPW" 0)"
 
 if [ "$RAM_MB" -gt 0 ]; then
   # CPU in tenths, so half-CPU plans survive integer arithmetic.
