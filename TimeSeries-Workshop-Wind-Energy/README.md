@@ -129,7 +129,7 @@ password is a way into your database. `openssl rand -base64 18` makes a good one
 
 ```bash
 docker compose --env-file ../.env up -d
-open http://localhost:3000          # log in as admin / GF_SECURITY_ADMIN_PASSWORD
+open http://127.0.0.1:3000          
 ```
 
 Grafana listens on `127.0.0.1` only, so it is not reachable from other machines on your
@@ -166,7 +166,7 @@ root `.env` with no hand-editing. The dashboards in `grafana/` are provisioned a
 # fill in your connection details in the REPO-ROOT .env (copy ../.env.example) and
 # both psql and Grafana read the same credentials.
 #
-#   docker compose --env-file ../.env up -d    then open http://localhost:3000  (admin / see .env)
+#   docker compose --env-file ../.env up -d    then open http://127.0.0.1:3000  (admin / see .env)
 
 services:
   grafana:
@@ -1304,7 +1304,7 @@ nothing, and reports "No Data" with no error anywhere to explain it.
 Check what your Grafana actually calls the plugin:
 
 ```bash
-curl -s -u admin:$GF_SECURITY_ADMIN_PASSWORD http://localhost:3000/api/datasources \
+curl -s -u admin:$GF_SECURITY_ADMIN_PASSWORD http://127.0.0.1:3000/api/datasources \
   | python3 -c "import json,sys;[print(x['type']) for x in json.load(sys.stdin)]"
 ```
 

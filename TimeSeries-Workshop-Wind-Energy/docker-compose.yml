@@ -4,7 +4,7 @@
 # fill in your connection details in the REPO-ROOT .env (copy ../.env.example) and
 # both psql and Grafana read the same credentials.
 #
-#   docker compose --env-file ../.env up -d    then open http://localhost:3000  (admin / see .env)
+#   docker compose --env-file ../.env up -d    then open http://127.0.0.1:3000  (admin / see .env)
 
 services:
   grafana:

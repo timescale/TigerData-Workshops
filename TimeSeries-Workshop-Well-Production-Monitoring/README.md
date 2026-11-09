@@ -190,7 +190,7 @@ Local Grafana instance provisioned via Docker, backed by a [Tiger Cloud](https:/
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) ≥ 4.x
 - A running Tiger Cloud service with the well production schema loaded
-- Network access to your Tiger Cloud endpoint from localhost
+- Network access to your Tiger Cloud endpoint from this machine
 
 ---
 
@@ -560,7 +560,7 @@ docker compose up -d
 
 **Access**
 ```
-http://localhost:3000
+http://127.0.0.1:3000
 ```
 Log in as `admin` with the password from your `.env`. Grafana listens on `127.0.0.1` only,
 so it is not reachable from other machines on your network.
