@@ -88,7 +88,7 @@ every `datasource` block, the three variable queries returned 6 / 12 / 96 option
 Check what your Grafana calls it rather than assuming:
 
 ```bash
-curl -s -u admin:PW http://localhost:3000/api/datasources \
+curl -s -u admin:PW http://127.0.0.1:3000/api/datasources \
   | python3 -c "import json,sys;[print(x['type']) for x in json.load(sys.stdin)]"
 ```
 
@@ -142,6 +142,16 @@ service needs all three of the following.
    `host_ip: 127.0.0.1`. Docker documents that on Linux, published ports bypass ufw/firewalld
    (Docker docs, *Packet filtering and firewalls*), so a host firewall is not a substitute.
    `DOCUMENTED`, not tested here.
+
+   **Then link to it as `127.0.0.1`, not `localhost`.** The binding is IPv4 only, and
+   `localhost` can resolve to `::1` first. `VERIFIED` on macOS with Docker Desktop and
+   Grafana 13.1.3, published as `127.0.0.1:3999:3000`: `curl -v http://localhost:3999`
+   printed `Trying [::1]:3999...`, was refused, then connected on `127.0.0.1`.
+   `http://[::1]:3999` alone got no connection. Browsers and curl fall back, so `localhost`
+   usually works and the problem hides. A client that does not fall back fails. Use
+   `127.0.0.1` in URLs in docs, scripts and comments. The container's own healthcheck is a
+   different case: it runs inside the container, where Grafana listens on all interfaces,
+   and `wget http://localhost:3000/api/health` passed there.
 2. **No anonymous access**, unless the datasource connects as a role whose grants you would
    hand to anyone (`SELECT`-only on the tables the dashboards read). The Viewer role does not
    provide that boundary; the database role has to.
@@ -720,7 +730,7 @@ because a wrong one renders nothing and reports nothing:
 
 ```
 curl -s -o /dev/null -w '%{http_code}' \
-  http://localhost:3000/public/img/icons/workshop/arrow.svg     # want 200
+  http://127.0.0.1:3000/public/img/icons/workshop/arrow.svg
 ```
 
 Draw the glyph pointing **north (straight up) at rotation 0** and set

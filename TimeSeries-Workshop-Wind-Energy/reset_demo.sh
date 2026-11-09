@@ -865,7 +865,7 @@ ELAPSED=$(( $(date +%s) - START_TS ))
 if [ "$BAD" = "0" ]; then
   head1 "Done in ${ELAPSED}s"
   say "Reload the Grafana dashboards to see the rebuilt data:"
-  GF="http://localhost:${GRAFANA_PORT:-3000}"
+  GF="http://127.0.0.1:${GRAFANA_PORT:-3000}"
   say "  ${C_DIM}${GF}/d/wind-global       start here — drills global > region > plant > turbine${C_RESET}"
   say "  ${C_DIM}${GF}/d/wind-turbine      turbine detail; zoom it to watch the source tier change${C_RESET}"
 else
